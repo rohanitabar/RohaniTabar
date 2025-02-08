@@ -45,7 +45,7 @@ body{
 
 .info-btn{
     margin-top: 25px;
-    font-size: 20px;
+    font-size: 23px;
     background: linear-gradient(to right,#59dbfc,#f72e2e);
     color: #fff;
     border: 0;
@@ -56,8 +56,8 @@ body{
     transition: .5s ;
     box-shadow: 0px 0px 10px 3px rgba(0, 0, 0, .4);
     transform: translateY(-20px);
-    background: linear-gradient(to right,#59dbfc,#f72e2e);
-    color: #fff;
+    background: linear-gradient(to right,#fff566,#ff8716);
+    color: #000;
 }
 
 .title{
@@ -125,4 +125,10 @@ body{
     width: 0px;
     margin-left: 50px;
 }
+}
+
+.footer{
+    width: 100%;
+    background-color: #738399;
+    color: #fff;
 }

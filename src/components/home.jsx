@@ -3,6 +3,7 @@ import './home.css';
 import Heder from './heder';
 import Skil from './skils';
 import About from './aboutMe';
+import Footer from './footer';
 
 class Home extends Component {
     render() { 
@@ -11,6 +12,7 @@ class Home extends Component {
             <Heder/>
             <About/>
             <Skil/>
+            <Footer/>
           </>
         );
     }

@@ -9,7 +9,7 @@ const Heder = () => {
           </div>
           <div className="col-md-6 my-name">
             <b>من عباس روحانی تبار هستم</b>
-            <p className="caption">برنامه نویس فرانت اند وب</p>
+            <p className="caption">برنامه نویس فرانت اند</p>
             <button className="btn info-btn ">همکاری با من</button>
           </div>
         </div>
