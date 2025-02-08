@@ -13,6 +13,12 @@ body{
     overflow-x: hidden;
 }
 
+.logo{
+    width: 80px;
+    height: 80px;
+    border-radius: 20px;
+}
+
 .about-me{
     background: linear-gradient(to right,#ffa42e,#f7f451);
     border-radius: 10px;
@@ -58,15 +64,17 @@ body{
     text-align: center;
     font-family: yekan;
     font-weight: 900;
+    margin-top: 20px;
 }
 
 .skil-container{
     direction: rtl;
     margin-top: 30px;
     display: flex;
-    justify-self: center;
+    justify-content: center;
     align-items: center;
     flex-direction: row;
+    flex-wrap: wrap;
 }
 
 .card-skil{
@@ -103,4 +111,18 @@ body{
 .card-title{
     margin-top: 10px;
     margin-bottom: 10px;
+}
+
+.description{
+    font-size: 23px;
+    text-align: center;
+    font-family: yekan;
+}
+
+@media screen and (max-width: 767px) {
+    .my-img{
+    border-radius: 10%;
+    width: 0px;
+    margin-left: 50px;
+}
 }
