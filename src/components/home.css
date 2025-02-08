@@ -1,0 +1,106 @@
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&display=swap');
+
+@font-face {
+    font-family: yekan;
+    src: url(./fonts/Yekan.ttf);
+}
+
+*{
+    box-sizing: border-box;
+}
+
+body{
+    overflow-x: hidden;
+}
+
+.about-me{
+    background: linear-gradient(to right,#ffa42e,#f7f451);
+    border-radius: 10px;
+    height: 450px;
+}
+
+.my-img{
+    border-radius: 10%;
+    width: 300px;
+    margin-left: 50px;
+}
+
+.my-name{
+    padding-top: 110px;
+    font-size: 30px;
+    color: #000;
+    text-align: center;
+    font-family: yekan;
+}
+.caption {
+    padding-top: 10px;
+    font-size: 35px;
+}
+
+.info-btn{
+    margin-top: 25px;
+    font-size: 20px;
+    background: linear-gradient(to right,#59dbfc,#f72e2e);
+    color: #fff;
+    border: 0;
+    box-shadow: 0px 0px 10px 3px rgba(0, 0, 0, .2);
+}
+
+.info-btn:hover{
+    transition: .5s ;
+    box-shadow: 0px 0px 10px 3px rgba(0, 0, 0, .4);
+    transform: translateY(-20px);
+    background: linear-gradient(to right,#59dbfc,#f72e2e);
+    color: #fff;
+}
+
+.title{
+    text-align: center;
+    font-family: yekan;
+    font-weight: 900;
+}
+
+.skil-container{
+    direction: rtl;
+    margin-top: 30px;
+    display: flex;
+    justify-self: center;
+    align-items: center;
+    flex-direction: row;
+}
+
+.card-skil{
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    font-weight: bold;
+    width: 150px;
+    font-family: Oswald;
+    box-shadow: 0px 0px 10px 3px rgba(0, 0, 0, .2);
+    border-radius: 10px;
+    margin-right: 35px;
+}
+
+.card-skil:hover{
+    transition: .5s;
+    transform: translateY(-10px);
+    box-shadow: 0px 0px 10px 3px rgba(0, 0, 0, .4);
+}
+
+.card-body{
+    border: 0;
+}
+
+.skil-img{
+    width: 100px;
+    margin-bottom: 5px;
+    height: 120px;
+    padding-top: 10px;
+}
+
+.card-title{
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
