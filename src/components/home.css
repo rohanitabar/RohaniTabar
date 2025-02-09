@@ -117,6 +117,7 @@ body{
     font-size: 23px;
     text-align: center;
     font-family: yekan;
+    width: 99%;
 }
 
 @media screen and (max-width: 767px) {
@@ -125,6 +126,43 @@ body{
     width: 0px;
     margin-left: 50px;
 }
+}
+
+.send-Email{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0px 3px 15px 3px rgba(0, 0, 0, .2);
+}
+
+.message-form{
+    direction:rtl;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    width: 95%;
+    background: linear-gradient(to right , #ff9292,#ffec80);
+    border-radius: 10px;
+    padding-top: 10px;
+}
+
+.send-btn{
+    border-radius: 10px;
+    border: 0;
+    background: #35c9f7;
+    color: #fff;
+    width: 80px;
+    font-family: yekan;
+    font-size: 1.5rem;
+    transition: .5s;
+    box-shadow: 0px 3px 15px 3px rgba(0, 0, 0, .2);
+}
+
+.send-btn:hover{  
+    transition: .5s;
+    background: linear-gradient(to right,#ff19ba,#35c9f7);
+    transform: translateY(-10px);
 }
 
 .footer {
