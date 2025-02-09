@@ -1,6 +1,7 @@
 import React from 'react';
 import Abbas from "./Abbas.png";
-const Heder = () => {
+import { Link } from 'react-router-dom';
+const Header = () => {
     return (
       <>
         <div className="row about-me">
@@ -10,11 +11,13 @@ const Heder = () => {
           <div className="col-md-6 my-name">
             <b>من عباس روحانی تبار هستم</b>
             <p className="caption">برنامه نویس فرانت اند</p>
-            <button className="btn info-btn ">همکاری با من</button>
+            <Link to="https://wa.me/989032991639">
+              <button className="btn info-btn ">همکاری با من</button>
+            </Link>
           </div>
         </div>
       </>
     );
 }
  
-export default Heder;
+export default Header;
