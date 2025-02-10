@@ -136,8 +136,11 @@ body{
     display: flex;
     justify-content: center;
     align-items: center;
+    flex-direction: column;
     box-shadow: 0px 3px 15px 3px rgba(0, 0, 0, .2);
     margin-left: 2.5%;
+    background: linear-gradient(to right , #ff9292,#ffec80);
+    padding: 10px;
 }
 
 .message-form{
@@ -147,7 +150,6 @@ body{
     align-items: center;
     flex-direction: column;
     width: 95%;
-    background: linear-gradient(to right , #ff9292,#ffec80);
     border-radius: 10px;
     padding-top: 10px;
 }

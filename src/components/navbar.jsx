@@ -3,7 +3,6 @@ import "bootstrap/dist/css/bootstrap.rtl.min.css";
 import {Link} from 'react-router-dom';
 import "./home.css";
 import logo from './logo site.jpg'
-import logo1 from "./logo site-1.jpg";
 
 class Navbar extends Component {
     state = {  } 
