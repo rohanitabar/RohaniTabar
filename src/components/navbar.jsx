@@ -2,7 +2,8 @@ import { Component } from 'react';
 import "bootstrap/dist/css/bootstrap.rtl.min.css";
 import {Link} from 'react-router-dom';
 import "./home.css";
-import logo from './code-logo-1.jpg'
+import logo from './logo site.jpg'
+import logo1 from "./logo site-1.jpg";
 
 class Navbar extends Component {
     state = {  } 
@@ -10,32 +11,33 @@ class Navbar extends Component {
         return (
         <>
             <nav class="navbar navbar-expand-lg bg-body-tertiary">
+                        <Link class="navbar-brand" to="/"><img src={logo} alt="Abbas" className='logo' style={{marginRight:'20px'}}/></Link>
+                        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+                        <span class="navbar-toggler-icon"></span>
+                        </button>
                 <div class="container-fluid">
+                    
                         <div class="collapse navbar-collapse" id="navbarSupportedContent">
                         <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                             <li class="nav-item">
-                            <Link class="nav-link " aria-current="page" to="#">ورود/ثبت نام</Link>
+                                <Link to= '/' class="nav-link">خانه</Link>
                             </li>
-                            <li class="nav-item">
-                            <Link class="nav-link" to="#">رزومه من</Link>
-                            </li>
-                            <li class="nav-item">
-                            <Link class="nav-link" to="#">وبلاگ</Link>
-                            </li>
-                            <li class="nav-item dropdown">
-                            <Link class="nav-link" to="#" role="button" aria-expanded="false">
+                           <li class="nav-item dropdown">
+                            <Link class="nav-link" to="/profilito" role="button" aria-expanded="false">
                                 نمونه کار ها
                             </Link>
                             </li>
                             <li class="nav-item">
-                            <Link class="nav-link">خانه</Link>
+                            <Link class="nav-link" to="/blog">وبلاگ</Link>
+                            </li>
+                            <li class="nav-item">
+                            <Link class="nav-link" to="/resoumeh">رزومه من</Link>
+                            </li>
+                             <li class="nav-item">
+                            <Link class="nav-link " aria-current="page" to="/login">ورود/ثبت نام</Link>
                             </li>
                         </ul>
                         </div>
-                        <Link class="navbar-brand" to="/"><img src={logo} alt="Abbas" className='logo' /></Link>
-                        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                        <span class="navbar-toggler-icon"></span>
-                        </button>
                 </div>
             </nav>
         </>

@@ -30,15 +30,15 @@ const Footer = () => {
         <div className="footer-section">
           <h3>شبکه‌های اجتماعی</h3>
           <div className="social-icons">
-            <Link to="#">
+            <a href="/">
               <i className="fab fa-github"></i>
-            </Link>
-            <Link to="#">
+            </a>
+            <a href="/">
               <i className="fab fa-linkedin"></i>
-            </Link>
-            <Link to="#">
+            </a>
+            <a href="/">
               <i className="fab fa-twitter"></i>
-            </Link>
+            </a>
           </div>
         </div>
       </div>

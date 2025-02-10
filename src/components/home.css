@@ -19,6 +19,10 @@ body{
     border-radius: 20px;
 }
 
+.navbar{
+    direction: rtl;
+}
+
 .about-me{
     background: linear-gradient(to right,#ffa42e,#f7f451);
     border-radius: 10px;
@@ -115,9 +119,9 @@ body{
 
 .description{
     font-size: 23px;
-    text-align: center;
+    text-align: justify;
     font-family: yekan;
-    width: 99%;
+    width: 97%;
 }
 
 @media screen and (max-width: 767px) {
@@ -133,6 +137,7 @@ body{
     justify-content: center;
     align-items: center;
     box-shadow: 0px 3px 15px 3px rgba(0, 0, 0, .2);
+    margin-left: 2.5%;
 }
 
 .message-form{
@@ -167,7 +172,7 @@ body{
 
 .footer {
   background-color: #2c3e50;
-  color: #ecf0f1;
+  color: #fff;
   padding: 2rem 0;
   margin-top: auto;
   direction: rtl;
@@ -207,28 +212,28 @@ body{
 }
 
 .footer-section a {
-  color: #ecf0f1;
+  color: #fff;
   text-decoration: none;
   transition: color 0.3s;
 }
 
 .footer-section a:hover {
-  color: #3498db;
+  color: #38afff;
 }
 
 .social-icons {
   display: flex;
   gap: 1rem;
-  font-size: 1.5rem;
+  font-size: 30px;
 }
 
 .social-icons a {
-  color: #ecf0f1;
+  color: #fff;
   transition: color 0.3s;
 }
 
 .social-icons a:hover {
-  color: #3498db;
+  color: #3482db;
 }
 
 .footer-bottom {
