@@ -5,7 +5,7 @@ import Navbar from './components/navbar';
 import Home from './components/home';
 import NotFound from './Notfound';
 import About from './components/aboutMe';
-import Blog from './components/blog';
+import News from './components/news';
 import myResumey from './components/my Resume';
 
 function App() {
@@ -13,7 +13,7 @@ function App() {
     <BrowserRouter>
       <Navbar />
       <Routes>
-        <Route path="/blog" Component={Blog} />
+        <Route path="/news" Component={News} />
         <Route path="/resumey" Component={myResumey} />
         <Route path="/about" Component={About} />
         <Route path="/" Component={Home} />

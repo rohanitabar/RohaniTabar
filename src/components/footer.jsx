@@ -25,7 +25,7 @@ const Footer = () => {
               <Link to="/resumey">رزومه من</Link>
             </li>
             <li>
-              <Link to="/blog">بلاگ</Link>
+              <Link to="/news">اخبار و مقالات</Link>
             </li>
           </ul>
         </div>

@@ -24,8 +24,6 @@ class Home extends Component {
             <br />
             <MyResumey />
             <br />
-            <h1 className="title">محبوب های وبلاگ</h1>
-            <br />
             <PopularPosts />
             <br />
             <br />

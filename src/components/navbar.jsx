@@ -27,7 +27,7 @@ class Navbar extends Component {
                             </Link>
                             </li>
                             <li class="nav-item">
-                            <Link class="nav-link" to="/blog">وبلاگ</Link>
+                            <Link class="nav-link" to="/news">اخبار و مقالات</Link>
                             </li>
                             <li class="nav-item">
                             <Link class="nav-link" to="/resumey">رزومه من</Link>
