@@ -4,7 +4,9 @@ import Header from './header';
 import Skil from './skils';
 import About from './aboutMe';
 import Footer from './footer';
+import MyResumey from "./my Resume";
 import SendMessage from './sendMessage';
+import PopularPosts from './popular-Posts';
 
 class Home extends Component {
     render() { 
@@ -14,9 +16,19 @@ class Home extends Component {
             <About />
             <Skil />
             <br />
-            <h1 className='title mb-4'>ارتباط با من</h1>
-            <SendMessage/>
-            <br /><br/>
+            <h1 className="title mb-4">ارتباط با من</h1>
+            <br />
+            <SendMessage />
+            <br />
+            <h1 className="title">رزومه من</h1>
+            <br />
+            <MyResumey />
+            <br />
+            <h1 className="title">محبوب های وبلاگ</h1>
+            <br />
+            <PopularPosts />
+            <br />
+            <br />
             <Footer />
           </>
         );

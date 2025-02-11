@@ -2,7 +2,7 @@
 
 @font-face {
     font-family: yekan;
-    src: url(./fonts/Yekan.ttf);
+    src: url(./fonts/yekan-regular.ttf);
 }
 
 *{
@@ -21,6 +21,8 @@ body{
 
 .navbar{
     direction: rtl;
+    font-family: yekan;
+    font-size: 17px;
 }
 
 .about-me{
@@ -67,8 +69,9 @@ body{
 .title{
     text-align: center;
     font-family: yekan;
-    font-weight: 900;
+    font-weight: 100;
     margin-top: 20px;
+    font-size: 35px;
 }
 
 .skil-container{
@@ -117,6 +120,12 @@ body{
     margin-bottom: 10px;
 }
 
+.description-container{
+  display:flex;
+  justify-content:center;
+   direction:rtl;
+}
+
 .description{
     font-size: 23px;
     text-align: justify;
@@ -126,10 +135,10 @@ body{
 
 @media screen and (max-width: 767px) {
     .my-img{
-    border-radius: 10%;
-    width: 0px;
-    margin-left: 50px;
-}
+      border-radius: 10%;
+      width: 0px;
+      margin-left: 50px;
+    }
 }
 
 .send-Email{
@@ -170,6 +179,11 @@ body{
     transition: .5s;
     background: linear-gradient(to right,#ff19ba,#35c9f7);
     transform: translateY(-10px);
+}
+
+.Resumey{
+  direction: rtl;
+  font-size: 23px;
 }
 
 .footer {

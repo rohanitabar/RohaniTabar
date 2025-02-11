@@ -5,7 +5,8 @@ const About = () => {
     return (
       <>
         <h1 className="title">درباره من</h1>
-        <div style={{display:'flex',justifyContent:'center', direction:'rtl'}}>
+        <br />
+        <div className="description-container">
           <p className="description mr-2 ml-2">
             من عباس روحانی تبار یه پسر ١٨ ساله ام که دیپلم ریاضی داره و علاقه
             مند به یادگیری و برنامه نویسیه . من از بچگی علاقه زیادی به کامپیوتر

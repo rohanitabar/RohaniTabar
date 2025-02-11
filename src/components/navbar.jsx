@@ -30,7 +30,7 @@ class Navbar extends Component {
                             <Link class="nav-link" to="/blog">وبلاگ</Link>
                             </li>
                             <li class="nav-item">
-                            <Link class="nav-link" to="/resoumeh">رزومه من</Link>
+                            <Link class="nav-link" to="/resumey">رزومه من</Link>
                             </li>
                              <li class="nav-item">
                             <Link class="nav-link " aria-current="page" to="/login">ورود/ثبت نام</Link>

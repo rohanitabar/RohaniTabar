@@ -36,7 +36,7 @@ class Skil extends Component {
                   </div>
                 </div>
               </div>
-              
+
               <div class="mb-3 ">
                 <div class="row">
                   <div class="col-md-8 card-skil">
@@ -96,7 +96,6 @@ class Skil extends Component {
                   </div>
                 </div>
               </div>
-
             </div>
           </>
         );

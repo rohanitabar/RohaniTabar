@@ -1,0 +1,81 @@
+@font-face {
+    font-family: yekan;
+    src: url(./fonts/yekan-regular.ttf);
+}
+*{
+    box-sizing: border-box;
+}
+
+.profile{
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+}
+
+.name{
+    width: 200px;
+    margin-top: 15px;
+}
+
+.blog-card{
+    width: 100%;
+    border-radius: 10px;
+    border: 2px solid #ebebeb;
+    display: flex;
+}
+
+.card-title{
+    font-family: yekan;
+}
+
+.card-img{
+    width: 200px;
+    height: 200px;
+    margin-right: 20px;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    border-radius: 10px;
+    box-shadow: 0  3px 15px 3px rgba(0, 0, 0, .3);
+}
+
+.blog-card-body{
+    display: flex;
+    justify-content: center;
+    flex-direction: column;
+    margin-right: 10px;
+    font-weight: 900;
+    font-family: yekan;
+}
+
+.description{
+    font-size: 18px;
+}
+
+.profile-container{
+    display: flex;
+}
+
+.btn-container{
+    display: flex;
+    justify-content: left;
+    margin-left: 25px;
+}
+
+.contnue{
+    font-size: 18px;
+    font-family: yekan;
+    border-radius: 10px;
+    border: 3px solid #ff4141;
+    height: 40px;
+}
+
+.contnue:hover{
+    transition: .5s;
+    background-color: #ff4141;
+    color: #fff;
+}
+
+.footer-card{
+    display: flex;
+    justify-content: space-between;
+}
