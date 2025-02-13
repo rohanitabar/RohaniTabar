@@ -50,11 +50,6 @@ class Navbar extends Component {
                         رزومه من
                       </Link>
                     </li>
-                    <li class="nav-item">
-                      <Link class="nav-link " aria-current="page" to="/login">
-                        ورود/ثبت نام
-                      </Link>
-                    </li>
                   </ul>
                 </div>
               </div>
