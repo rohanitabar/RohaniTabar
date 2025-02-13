@@ -8,7 +8,7 @@ const Footer = () => {
       <div className="footer-content">
         <div className="footer-section">
           <h3>تماس با من</h3>
-          <Link to="https://a.rohanitabar.gmail.com">
+          <Link to="mailto:a.rohanitabar.gmail.com">
             ایمیل: a.rohanitabar@gmail.com
           </Link>
           <br />
@@ -22,7 +22,7 @@ const Footer = () => {
               <Link to="/about">درباره من</Link>
             </li>
             <li>
-              <Link to="/resumey">رزومه من</Link>
+              <Link to="/myprojects">پروژه های من</Link>
             </li>
             <li>
               <Link to="/news">اخبار و مقالات</Link>

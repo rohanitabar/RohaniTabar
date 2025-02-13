@@ -25,6 +25,13 @@
     display: flex;
 }
 
+.blog-card:hover{
+    .card-img{
+        transition: .5s;
+        filter:drop-shadow(4px 4px 4px rgba(0,0,0 ,.4));
+    }
+}
+
 .card-title{
     font-family: yekan;
 }

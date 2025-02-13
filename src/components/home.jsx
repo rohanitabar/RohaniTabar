@@ -20,7 +20,6 @@ class Home extends Component {
             <br />
             <SendMessage />
             <br />
-            <h1 className="title">رزومه من</h1>
             <br />
             <MyResumey />
             <br />

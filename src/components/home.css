@@ -25,6 +25,11 @@ body {
   font-size: 17px;
 }
 
+.nav-item:hover{
+  transition: .1s ;
+  border-bottom: 3px solid #3482db;
+}
+
 .about-me {
   background: linear-gradient(to right, #ffa42e, #f7f451);
   border-radius: 10px;
@@ -181,17 +186,78 @@ body {
   transform: translateY(-10px);
 }
 
-.Resumey {
-  direction: rtl;
-  font-size: 23px;
+.resumey {
+  width: 10px;
+  height: 520px;
+  background: linear-gradient(to top,#ff7272, #ffe862);
+  border-radius: 10px;
+}
+
+.circle{
+  width: 20px; 
+  height: 20px;
+  background: linear-gradient(to right,#fffb00, #ff00b3);
+  border-radius: 50%;
+  margin: 0 0 0px -5px;
+  display: flex;
+  align-items: center;
+}
+
+.circle a{
+  text-decoration: none;
+  color: #000;
+  text-align: center;
+}
+
+.info{
+  width: 300px;
+  height: 80px;
+  box-shadow: 0px 3px 15px 3px rgba(0, 0, 0, .3);
+  border-radius: 10px;
+  margin-left: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.info-1{
+  width: 300px;
+  height: 80px;
+  box-shadow: 0px 3px 15px 3px rgba(0, 0, 0, .3);
+  border-radius: 10px;
+  margin-right: 40px;
+  margin-left: -320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.info:hover{
+  transition: .5s;
+  box-shadow: 0px 3px 15px 3px rgba(0, 0, 0, .5);
+  color: #0a5efa;
+}
+
+.info-1:hover{
+  transition: .5s;
+  box-shadow: 0px 3px 15px 3px rgba(0, 0, 0, .5);
+  color: #0a5efa;
 }
 
 .card {
   margin-left: 25px;
 }
 
+.card:hover{
+  .card-img-top{
+    transition: .5s;
+    filter:drop-shadow(0px 4px rgba(0,0,0 ,.2));
+  }
+}
+
 .card-img-top {
   border-radius: 10px;
+  height: 200px;
 }
 
 .btn-container {
@@ -224,6 +290,7 @@ body {
   color: #777777;
   margin-top: 25px;
 }
+
 
 .footer {
   background-color: #2c3e50;

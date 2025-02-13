@@ -13,9 +13,9 @@ const PopularPosts = () => {
             display: "flex",
             justifyContent: "center",
             direction: "rtl",
-          }}
+          }} className='row'
         >
-          <div className="card text-bg-light mb-3" style={{ maxWidth: "18rem" }}>
+          <div className="card text-bg-light mb-3 col-xs-12 col-md-4" style={{ maxWidth: "18rem" }}>
             <img
               src="https://akm-img-a-in.tosshub.com/businesstoday/images/story/202501/679a4e284a5b7-deepseeks-rapid-success-has-not-only-rattled-global-ai-players-but-also-ignited-a-fierce-battle-at-294954805-16x9.jpg?size=1200:675"
               class="card-img-top"
@@ -45,7 +45,7 @@ const PopularPosts = () => {
             </div>
           </div>
 
-          <div class="card text-bg-light mb-3" style={{ maxWidth: "18rem" }}>
+          <div class="card text-bg-light mb-3 col-xs-12 col-md-4" style={{ maxWidth: "18rem" }}>
             <img
               src="https://source.washu.edu/app/uploads/2025/02/deepresize1-1024x684.jpg"
               class="card-img-top"
@@ -74,7 +74,7 @@ const PopularPosts = () => {
             </div>
           </div>
 
-          <div class="card text-bg-light mb-3" style={{ maxWidth: "18rem" }}>
+          <div class="card text-bg-light mb-3 col-xs-12 col-md-4" style={{ maxWidth: "18rem" }}>
             <img
               src="https://www.securitymagazine.com/ext/resources/2021/12/13/AI-news.jpg?height=635&t=1639404760&width=1200"
               alt="AI news"

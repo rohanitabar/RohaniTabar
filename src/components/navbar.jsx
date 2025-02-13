@@ -8,38 +8,58 @@ class Navbar extends Component {
     state = {  } 
     render() { 
         return (
-        <>
+          <>
             <nav class="navbar navbar-expand-lg bg-body-tertiary">
-                        <Link class="navbar-brand" to="/"><img src={logo} alt="Abbas" className='logo' style={{marginRight:'20px'}}/></Link>
-                        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                        <span class="navbar-toggler-icon"></span>
-                        </button>
-                <div class="container-fluid">
-                    
-                        <div class="collapse navbar-collapse" id="navbarSupportedContent">
-                        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                            <li class="nav-item">
-                                <Link to= '/' class="nav-link">خانه</Link>
-                            </li>
-                           <li class="nav-item dropdown">
-                            <Link class="nav-link" to="/profilito" role="button" aria-expanded="false">
-                                نمونه کار ها
-                            </Link>
-                            </li>
-                            <li class="nav-item">
-                            <Link class="nav-link" to="/news">اخبار و مقالات</Link>
-                            </li>
-                            <li class="nav-item">
-                            <Link class="nav-link" to="/resumey">رزومه من</Link>
-                            </li>
-                             <li class="nav-item">
-                            <Link class="nav-link " aria-current="page" to="/login">ورود/ثبت نام</Link>
-                            </li>
-                        </ul>
-                        </div>
+              <Link class="navbar-brand" to="/">
+                <img
+                  src={logo}
+                  alt="Abbas"
+                  className="logo"
+                  style={{ marginRight: "20px" }}
+                />
+              </Link>
+              <button
+                class="navbar-toggler"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#navbarSupportedContent"
+                aria-controls="navbarSupportedContent"
+                aria-expanded="false"
+                aria-label="Toggle navigation"
+              >
+                <span class="navbar-toggler-icon"></span>
+              </button>
+              <div class="container-fluid">
+                <div
+                  class="collapse navbar-collapse"
+                  id="navbarSupportedContent"
+                >
+                  <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                      <Link to="/" class="nav-link">
+                        خانه
+                      </Link>
+                    </li>
+                    <li class="nav-item">
+                      <Link class="nav-link" to="/news">
+                        اخبار و مقالات
+                      </Link>
+                    </li>
+                    <li class="nav-item">
+                      <Link class="nav-link" to="/myprojects">
+                        رزومه من
+                      </Link>
+                    </li>
+                    <li class="nav-item">
+                      <Link class="nav-link " aria-current="page" to="/login">
+                        ورود/ثبت نام
+                      </Link>
+                    </li>
+                  </ul>
                 </div>
+              </div>
             </nav>
-        </>
+          </>
         );
     }
 }

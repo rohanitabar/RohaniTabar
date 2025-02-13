@@ -14,7 +14,7 @@ function App() {
       <Navbar />
       <Routes>
         <Route path="/news" Component={News} />
-        <Route path="/resumey" Component={myResumey} />
+        <Route path="/myprojects" Component={myResumey} />
         <Route path="/about" Component={About} />
         <Route path="/" Component={Home} />
         <Route path="*" Component={NotFound} />
