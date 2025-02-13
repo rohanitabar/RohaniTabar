@@ -22,7 +22,7 @@ const Footer = () => {
               <Link to="/about">درباره من</Link>
             </li>
             <li>
-              <Link to="/myprojects">پروژه های من</Link>
+              <Link to="/myprojects">رزومه من</Link>
             </li>
             <li>
               <Link to="/news">اخبار و مقالات</Link>
@@ -30,18 +30,18 @@ const Footer = () => {
           </ul>
         </div>
 
-        <div className="footer-section">
+        <div className="footer-section" style={{display:'flex', justifyContent:'center', flexDirection:'column'}}>
           <h3>شبکه‌های اجتماعی</h3>
           <div className="social-icons">
-            <a href="/">
+            <Link to="https://github.com/rohanitabar/" target="_blank">
               <i className="fab fa-github"></i>
-            </a>
-            <a href="/">
-              <i className="fab fa-linkedin"></i>
-            </a>
-            <a href="/">
-              <i className="fab fa-twitter"></i>
-            </a>
+            </Link>
+            <Link to="https://wa.me/989032991639" target="_blank">
+              <i className="fab fa-whatsapp"></i>
+            </Link>
+            <Link to="https://t.me/AbbasRt_1385" target="_blank">
+              <i className="fab fa-telegram"></i>
+            </Link>
           </div>
         </div>
       </div>

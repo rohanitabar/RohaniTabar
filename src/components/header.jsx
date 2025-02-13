@@ -11,7 +11,7 @@ const Header = () => {
           <div className="col-md-6 my-name">
             <b>من عباس روحانی تبار هستم</b>
             <p className="caption">برنامه نویس فرانت اند</p>
-            <Link to="https://wa.me/989032991639">
+            <Link to="https://wa.me/989032991639" target='_blank'>
               <button className="btn info-btn ">همکاری با من</button>
             </Link>
           </div>

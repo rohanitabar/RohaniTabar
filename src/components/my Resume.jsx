@@ -1,9 +1,21 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import './home.css'
 
 const MyResumey = () => {
     return (
       <>
+        <h1 className="title">سابقه کاری</h1>
+        <br />
+        <br />
+        <div className="work-card-container">
+          <div className="work-card">
+            <h1 className='work-card-title'>
+              آکاگرام
+            </h1>
+            <p className="des-work-card text-muted">پروژه ای<br/>ساخت صفحه راهنما</p>
+          </div>
+        </div>
         <h1 className="title">پروژه های من</h1>
         <br />
         <br />
