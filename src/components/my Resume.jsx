@@ -8,9 +8,7 @@ const MyResumey = () => {
         <h1 className="title">پروژه های من</h1>
         <br />
         <br />
-        <div
-          style={{ display: "flex", justifyContent: "center" }}
-        >
+        <div className='resumey-container'>
           <div className="resumey">
             <div className="circle mt-5 mb-5">
               <Link
