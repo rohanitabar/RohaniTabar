@@ -47,7 +47,7 @@ const Footer = () => {
       </div>
 
       <div className="footer-bottom">
-        <p>{new Date().getFullYear()} - تمامی حقوق محفوظ است &copy;</p>
+        <p>{new Date().getFullYear()} - تمامی حقوق برای <b>عباس روحانی تبار</b> محفوظ است &copy;</p>
       </div>
     </footer>
   );

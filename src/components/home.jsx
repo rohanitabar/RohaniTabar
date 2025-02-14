@@ -5,8 +5,8 @@ import Skil from './skils';
 import About from './aboutMe';
 import Footer from './footer';
 import MyResumey from "./my Resume";
-import SendMessage from './sendMessage';
 import PopularPosts from './popular-Posts';
+import { SendMessage } from './sendMessage';
 
 class Home extends Component {
     render() { 
@@ -18,7 +18,7 @@ class Home extends Component {
             <br />
             <h1 className="title mb-4">ارتباط با من</h1>
             <br />
-            <SendMessage />
+            <SendMessage/>
             <br />
             <br />
             <MyResumey />

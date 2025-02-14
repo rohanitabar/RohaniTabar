@@ -16,7 +16,7 @@ const MyResumey = () => {
                 target="_blank"
               >
                 <div className="info">
-                  <h3>چت بات رستم</h3>
+                  <h3>چت بات</h3>
                 </div>
               </Link>
             </div>
