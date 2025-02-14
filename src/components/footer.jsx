@@ -8,24 +8,24 @@ const Footer = () => {
       <div className="footer-content">
         <div className="footer-section">
           <h3>تماس با من</h3>
-          <Link to="mailto:a.rohanitabar.gmail.com">
+          <Link to="mailto:a.rohanitabar.gmail.com" target='_blank'>
             ایمیل: a.rohanitabar@gmail.com
           </Link>
           <br />
-          <Link to="tel:9032991639">تلفن: ٠٩٠٣٢٩٩١٦٣٩ </Link>
+          <Link to="tel:9032991639" target='_blank'>تلفن: ٠٩٠٣٢٩٩١٦٣٩ </Link>
         </div>
 
         <div className="footer-section">
           <h3>دسترسی سریع</h3>
           <ul>
             <li>
-              <Link to="/about">درباره من</Link>
+              <Link to="/about" target='_blank'>درباره من</Link>
             </li>
             <li>
-              <Link to="/myprojects">رزومه من</Link>
+              <Link to="/myprojects" target='_blank'>رزومه من</Link>
             </li>
             <li>
-              <Link to="/news">اخبار و مقالات</Link>
+              <Link to="/news" target='_blank'>اخبار و مقالات</Link>
             </li>
           </ul>
         </div>

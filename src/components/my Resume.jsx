@@ -5,23 +5,11 @@ import './home.css'
 const MyResumey = () => {
     return (
       <>
-        <h1 className="title">سابقه کاری</h1>
-        <br />
-        <br />
-        <div className="work-card-container">
-          <div className="work-card">
-            <h1 className='work-card-title'>
-              آکاگرام
-            </h1>
-            <p className="des-work-card text-muted">پروژه ای<br/>ساخت صفحه راهنما</p>
-          </div>
-        </div>
         <h1 className="title">پروژه های من</h1>
         <br />
         <br />
         <div
           style={{ display: "flex", justifyContent: "center" }}
-          className="col-12"
         >
           <div className="resumey">
             <div className="circle mt-5 mb-5">
@@ -92,6 +80,12 @@ const MyResumey = () => {
               </Link>
             </div>
           </div>
+        </div>
+        <h1 className="title">تحصیلات</h1><br/><br/>
+        <div className="work-card-container">
+          <div className="work-card">
+            <h1 className="work-card-title">دیپلم ریاضی</h1>
+          </div><br/><br/>
         </div>
       </>
     );
