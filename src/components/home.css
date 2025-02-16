@@ -461,6 +461,7 @@ a {
   padding: 2rem 0;
   margin-top: auto;
   direction: rtl;
+  font-family: yekan;
 }
 
 .footer-content {
@@ -474,13 +475,18 @@ a {
 }
 
 .footer-section {
-  flex: 1;
   min-width: 250px;
+  display: flex;
+  justify-content: center;
+  flex-direction: column;
 }
 
 .footer-section h3 {
   color: #3498db;
   margin-bottom: 1rem;
+  text-align: center;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .footer-section p {
@@ -494,12 +500,18 @@ a {
 
 .footer-section ul li {
   margin: 0.5rem 0;
+  text-align: center;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .footer-section a {
   color: #fff;
   text-decoration: none;
   transition: color 0.3s;
+  text-align: center;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .footer-section a:hover {
@@ -508,6 +520,7 @@ a {
 
 .social-icons {
   display: flex;
+  justify-content: center;
   gap: 1rem;
   font-size: 30px;
 }
