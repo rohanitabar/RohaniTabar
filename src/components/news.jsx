@@ -15,12 +15,14 @@ const News = () => {
         style={{ display: "flex", direction: "rtl", justifyContent: "center" }}
         className="row"
       >
-        <div className="blog-card col-12">
-          <img
-            src="https://akm-img-a-in.tosshub.com/businesstoday/images/story/202501/679a4e284a5b7-deepseeks-rapid-success-has-not-only-rattled-global-ai-players-but-also-ignited-a-fierce-battle-at-294954805-16x9.jpg?size=1200:675"
-            alt="Qwen"
-            className="card-img"
-          />
+        <div className="blog-card row col-12">
+          <div style={{ display: "flex", justifyContent: "center", width:'100%' }}>
+            <img
+              src="https://akm-img-a-in.tosshub.com/businesstoday/images/story/202501/679a4e284a5b7-deepseeks-rapid-success-has-not-only-rattled-global-ai-players-but-also-ignited-a-fierce-battle-at-294954805-16x9.jpg?size=1200:675"
+              alt="Qwen"
+              className="card-img"
+            />
+          </div>
           <div className="blog-card-body">
             <h3 className="card-title">Qwen، رقیب جدی ChatGPT</h3>
             <p className="description text-muted">
@@ -45,12 +47,14 @@ const News = () => {
           </div>
         </div>
 
-        <div className="blog-card col-12">
-          <img
-            src="https://source.washu.edu/app/uploads/2025/02/deepresize1-1024x684.jpg"
-            alt="deepseek"
-            className="card-img"
-          />
+        <div className="blog-card row col-12">
+          <div style={{ display: "flex", justifyContent: "center", width:'100%' }}>
+            <img
+              src="https://source.washu.edu/app/uploads/2025/02/deepresize1-1024x684.jpg"
+              alt="deepseek"
+              className="card-img col-xs-12"
+            />
+          </div>
           <div className="blog-card-body">
             <h3 className="card-title">
               همه چیز درباره deepseek، هوش مصنوعی چینی که جهان را منفجر کرد
@@ -74,12 +78,14 @@ const News = () => {
           </div>
         </div>
 
-        <div className="blog-card col-12">
-          <img
-            src="https://www.securitymagazine.com/ext/resources/2021/12/13/AI-news.jpg?height=635&t=1639404760&width=1200"
-            alt="AI news"
-            className="card-img"
-          />
+        <div className="blog-card row col-12">
+          <div style={{ display: "flex", justifyContent: "center", width:'100%' }}>
+            <img
+              src="https://www.securitymagazine.com/ext/resources/2021/12/13/AI-news.jpg?height=635&t=1639404760&width=1200"
+              alt="AI news"
+              className="card-img"
+            />
+          </div>
           <div className="blog-card-body">
             <h3 className="card-title">اخبار هوش مصنوعی(AI)</h3>
             <p className="description text-muted">
@@ -87,12 +93,12 @@ const News = () => {
               علم را جابه جا میکنند، هرآنچه در دنیای هوش مصننوعی میگذرد، در
               اینجا بخوانید.
             </p>
-            <div className="footer-card">
+            <div className="footer-card row">
               <div className="profile-container">
                 <img src={profile} alt="Abbas" className="profile" />
                 <h3 className="name">عباس روحانی تبار</h3>
               </div>
-              <div className="btn-container">
+              <div className="btn-container-1">
                 <Link to="/ainews">
                   <button className="btn contnue">ادامه مطلب ...</button>
                 </Link>

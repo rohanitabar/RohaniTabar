@@ -1,7 +1,6 @@
 import React from 'react';
 import Comment from './comment';
 import './home.css'
-import { Link } from 'react-router-dom';
 
 const AINews = () => {
     return (

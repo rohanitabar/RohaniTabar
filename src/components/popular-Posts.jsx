@@ -32,7 +32,7 @@ const PopularPosts = () => {
                 سابقه اش رو بررسی کنم .
               </p>
             </div>
-            <div className="btn-container mb-2">
+            <div className="btn-container-1 mb-2">
               <Link to='/qwenai'>
                 <button className="btn contnue">ادامه مطلب ...</button>
               </Link>
@@ -61,7 +61,7 @@ const PopularPosts = () => {
                 این پست میخوام درباره این AI عجیب بیشتر صحبت کنم .
               </p>
             </div>
-            <div className="btn-container mb-2">
+            <div className="btn-container-1 mb-2">
               <Link to='/deepseekai'>
                 <button className="btn contnue">ادامه مطلب ...</button>
               </Link>
@@ -89,7 +89,7 @@ const PopularPosts = () => {
                 میگذرد، در اینجا بخوانید.
               </p>
             </div>
-            <div className="btn-container mb-2">
+            <div className="btn-container-1 mb-2">
               <Link to='/ainews'>
                 <button className="btn contnue">ادامه مطلب ...</button>
               </Link>

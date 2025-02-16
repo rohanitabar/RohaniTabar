@@ -19,10 +19,11 @@
 }
 
 .blog-card{
-    width: 100%;
+    width: 90%;
     border-radius: 10px;
     border: 2px solid #ebebeb;
     display: flex;
+    margin-bottom: 20px;
 }
 
 .blog-card:hover{
@@ -37,13 +38,12 @@
 }
 
 .card-img{
-    width: 200px;
-    height: 200px;
+    width: 100%;
+    height: 500px;
     margin-right: 20px;
     margin-top: 20px;
     margin-bottom: 20px;
-    border-radius: 10px;
-    box-shadow: 0  3px 15px 3px rgba(0, 0, 0, .3);
+    border-radius: 15px;
 }
 
 .blog-card-body{
@@ -61,11 +61,22 @@
 
 .profile-container{
     display: flex;
+    justify-content: right;
+    margin-bottom: 10px;
 }
 
 .btn-container{
     display: flex;
     justify-content: left;
+    margin-bottom: 25px;
+    width: 100px;
+    margin-right: -50px;
+}
+
+.btn-container-1{
+    display: flex;
+    justify-content: left;
+    margin-bottom: 25px;
 }
 
 .contnue{
@@ -85,4 +96,10 @@
 .footer-card{
     display: flex;
     justify-content: space-between;
+}
+
+@media screen and (max-width: 630px) {
+.contnue{
+    font-size: 13px;
+}
 }
