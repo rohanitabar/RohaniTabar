@@ -33,7 +33,7 @@ const PopularPosts = () => {
               </p>
             </div>
             <div className="btn-container mb-2">
-              <Link>
+              <Link to='/qwenai'>
                 <button className="btn contnue">ادامه مطلب ...</button>
               </Link>
             </div>
@@ -62,7 +62,7 @@ const PopularPosts = () => {
               </p>
             </div>
             <div className="btn-container mb-2">
-              <Link>
+              <Link to='/deepseekai'>
                 <button className="btn contnue">ادامه مطلب ...</button>
               </Link>
             </div>
@@ -90,7 +90,7 @@ const PopularPosts = () => {
               </p>
             </div>
             <div className="btn-container mb-2">
-              <Link>
+              <Link to='/ainews'>
                 <button className="btn contnue">ادامه مطلب ...</button>
               </Link>
             </div>

@@ -1,0 +1,133 @@
+:root {
+  --primary-color: #eb2525;
+  --secondary-color: #4f46e5;
+  --background-color: #f8fafc;
+}
+ 
+
+body {
+  font-family: "Vazir", sans-serif;
+}
+
+.comment-section {
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+  padding: 2rem;
+  margin-top: 50px;
+  direction: rtl;
+  padding: 2rem;
+}
+
+.comment-form {
+  margin-bottom: 2rem;
+  direction: rtl;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+  direction: rtl;
+}
+
+input,
+textarea {
+  width: 100%;
+  padding: 0.8rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-family: inherit;
+  transition: border-color 0.3s;
+}
+
+input:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--secondary-color);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.submit-btn {
+  background: var(--secondary-color);
+  color: white;
+  padding: 0.8rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.submit-btn:hover {
+  background: var(--secondary-color);
+}
+
+.comment {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 1rem 0;
+  position: relative;
+  direction: rtl;
+}
+
+.comment-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+  direction: rtl;
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 1rem;
+}
+
+.comment-author {
+  font-weight: bold;
+  color: #1e293b;
+}
+
+.comment-date {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.comment-actions {
+  margin-top: 1rem;
+  display: flex;
+  gap: 1rem;
+}
+
+.reply-btn,
+.like-btn {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  transition: all 0.3s;
+}
+
+.reply-btn:hover,
+.like-btn:hover {
+  background: #f1f5f9;
+  color: var(--primary-color);
+}
+
+.replies {
+  margin-right: 2rem;
+  border-right: 2px solid #e2e8f0;
+  padding-right: 1rem;
+}
+
+.likes-count {
+  margin-right: 0.3rem;
+}

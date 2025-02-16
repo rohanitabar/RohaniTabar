@@ -1,14 +1,19 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import './home.css'
+import './home.css';
 
 const MyResumey = () => {
     return (
       <>
+        <div>
+          <head>
+            <title>عباس روحانی تبار</title>
+          </head>
+        </div>
         <h1 className="title">پروژه های من</h1>
         <br />
         <br />
-        <div className='resumey-container'>
+        <div className="resumey-container">
           <div className="resumey">
             <div className="circle mt-5 mb-5">
               <Link
@@ -79,11 +84,15 @@ const MyResumey = () => {
             </div>
           </div>
         </div>
-        <h1 className="title">تحصیلات</h1><br/><br/>
+        <h1 className="title">تحصیلات</h1>
+        <br />
+        <br />
         <div className="work-card-container">
           <div className="work-card">
             <h1 className="work-card-title">دیپلم ریاضی</h1>
-          </div><br/><br/>
+          </div>
+          <br />
+          <br />
         </div>
       </>
     );
