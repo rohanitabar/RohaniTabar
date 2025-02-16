@@ -115,6 +115,13 @@ a {
 
 .card-body {
   border: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.card-text{
+  font-size: 18px;
+  font-family: yekan;
 }
 
 .skil-img {
@@ -417,6 +424,35 @@ a {
   .img{
     width: 300px;
   }
+}
+
+@media screen and (max-width: 1200px) {
+  .img-ai{
+    margin-top: 20px;
+  }
+}
+
+.img-ai{
+  width: 350px;
+  height: 300px;
+  border-radius: 10px;
+  box-shadow: 0 3px 15px 3px rgba(0, 0, 0, .3);
+
+}
+
+.title-ai{
+  font-size: 25px;
+  font-family: Lalezar;
+  text-align: center;
+  margin-top: 25px;
+}
+
+.des-ai{
+  font-size: 20px;
+  font-family: yekan;
+  text-align: justify;
+  width: 90%;
+  padding-right: 70px;
 }
 
 .footer {
