@@ -1,0 +1,5 @@
+// Before implementing the project for the first time after construction
+
+npm install --save-dev cross-env
+
+"start": "cross-env NODE_OPTIONS=--openssl-legacy-provider react-scripts start",
