@@ -46,6 +46,15 @@ const initialSocials = [
   { id: 'whatsapp', href: 'https://wa.me/989032991639', iconUrl: 'https://cdn.simpleicons.org/whatsapp/25D366' },
   { id: 'telegram', href: 'https://t.me/AbbasRt_1385', iconUrl: 'https://cdn.simpleicons.org/telegram/26A5E4' }
 ];
+const sectionPaths = {
+  about: '/about',
+  experience: '/experience',
+  skills: '/skills',
+  projects: '/featured-projects',
+  blog: '/latest-posts',
+  contact: '/contact'
+};
+const sectionIdsByPath = Object.fromEntries(Object.entries(sectionPaths).map(([id, path]) => [path, id]));
 
 async function api(url, options = {}) {
   const scope = url.includes('/career') ? 'experience' : url.includes('/projects') ? 'projects' : url.includes('/posts') ? 'posts' : url.includes('/skills') ? 'skills' : url.includes('/socials') ? 'socials' : 'api';
@@ -185,9 +194,14 @@ export default function Portfolio() {
     window.addEventListener('scroll', updateHeader, { passive: true });
     return () => window.removeEventListener('scroll', updateHeader);
   }, []);
-  useEffect(() => { if (location.hash) requestAnimationFrame(() => document.getElementById(location.hash.slice(1))?.scrollIntoView()); else window.scrollTo(0, 0); setMenuOpen(false); }, [location.pathname, location.hash]);
   useEffect(() => {
-    if (pathname !== '/' || isAdmin) return undefined;
+    const sectionId = sectionIdsByPath[pathname] || location.hash.slice(1);
+    if (sectionId) requestAnimationFrame(() => document.getElementById(sectionId)?.scrollIntoView());
+    else if (pathname === '/') window.scrollTo(0, 0);
+    setMenuOpen(false);
+  }, [location.pathname, location.hash, pathname]);
+  useEffect(() => {
+    if ((pathname !== '/' && !sectionIdsByPath[pathname]) || isAdmin || isBlog || isProjects || articleId) return undefined;
     const sections = Array.from(document.querySelectorAll('main section[id]'));
     if (!sections.length) return undefined;
     let frame = 0;
@@ -200,8 +214,8 @@ export default function Portfolio() {
         sections.forEach((section) => {
           if (section.getBoundingClientRect().top <= threshold) active = section;
         });
-        const hash = active.id === 'home' ? '' : `#${active.id}`;
-        if (window.location.hash !== hash) window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}${hash}`);
+        const nextPath = active.id === 'home' ? '/' : sectionPaths[active.id] || `/${active.id}`;
+        if (window.location.pathname !== nextPath) window.history.replaceState(window.history.state, '', `${nextPath}${window.location.search}`);
       });
     };
     updateHash();
@@ -212,13 +226,13 @@ export default function Portfolio() {
       window.removeEventListener('resize', updateHash);
       if (frame) window.cancelAnimationFrame(frame);
     };
-  }, [pathname, isAdmin]);
+  }, [pathname, isAdmin, isBlog, isProjects, articleId]);
   // Web Components
   // Header
   return <div className={`site-shell ${isAdmin ? 'admin-shell' : ''}`}>
     <header className={`topbar${headerHidden ? ' is-hidden' : ''}`}>
       <a className="brand" href="/" aria-label="Abbas home"><img src={logo} alt="" /><span>AbbasRt<span className="brand-dot">.</span></span></a>
-      {!isAdmin && <><button className="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? '×' : '☰'}</button><nav className={`main-nav ${menuOpen ? 'is-open' : ''}`} aria-label="Main navigation">{t.nav.map((label, i) => <Link key={label} to={i === 3 ? '/projects' : i === 4 ? '/blog' : i === 0 ? '/' : `/#${['','about','skills','','','contact'][i]}`} {...(i === 3 || i === 4 ? { target: '_blank', rel: 'noopener noreferrer' } : {})} onClick={() => setMenuOpen(false)}>{label}</Link>)}</nav></>}
+      {!isAdmin && <><button className="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? '×' : '☰'}</button><nav className={`main-nav ${menuOpen ? 'is-open' : ''}`} aria-label="Main navigation">{t.nav.map((label, i) => <Link key={label} to={['/', sectionPaths.about, sectionPaths.skills, '/projects', '/blog', sectionPaths.contact][i]} {...(i === 3 || i === 4 ? { target: '_blank', rel: 'noopener noreferrer' } : {})} onClick={() => setMenuOpen(false)}>{label}</Link>)}</nav></>}
       <div className="top-actions">
         <PushToggle lang={lang} notify={setNotice} />
         <button className="icon-button" onClick={() => setLang(lang === 'fa' ? 'en' : 'fa')} aria-label={lang === 'fa' ? 'Switch to English' : 'تغییر زبان به فارسی'}>{t.language}</button>
@@ -227,7 +241,7 @@ export default function Portfolio() {
     </header>
     <RuntimeErrorBoundary lang={lang}>{isAdmin ? <AdminPage t={t} lang={lang} data={data} refresh={refresh} onCareerSaved={updateCareer} notify={setNotice} unresolvedNoticeCount={unresolvedNoticeCount} setUnresolvedNoticeCount={setUnresolvedNoticeCount} /> : isBlog ? <BlogPage posts={data.posts} lang={lang} t={t} ads={data.ads} socials={data.socials} /> : isProjects ? <ProjectsPage projects={data.projects} lang={lang} t={t} ads={data.ads} socials={data.socials} /> : articleId ? <ArticlePage post={currentPost} posts={data.posts} lang={lang} t={t} notify={setNotice} refresh={refresh} ads={data.ads} socials={data.socials} /> : <main>
       <section className="hero section-wrap" id="home">
-        <div className="hero-copy"><span className="eyebrow"><span className="status-dot" />{t.heroEyebrow}</span><h1><span className="hero-name">{t.heroTitle}</span><span className="hero-slogan accent-text">{lang === 'fa' ? 'وب را با ایده‌ها زنده می‌کنم.' : 'I bring ideas to the web.'}</span></h1><p>{t.heroText}</p><div className="hero-actions"><a className="button button-primary" href="#projects">{t.projects}</a><a className="text-link" href="#contact">{t.contact}</a></div></div>
+        <div className="hero-copy"><span className="eyebrow"><span className="status-dot" />{t.heroEyebrow}</span><h1><span className="hero-name">{t.heroTitle}</span><span className="hero-slogan accent-text">{lang === 'fa' ? 'وب را با ایده‌ها زنده می‌کنم.' : 'I bring ideas to the web.'}</span></h1><p>{t.heroText}</p><div className="hero-actions"><Link className="button button-primary" to={sectionPaths.projects}>{t.projects}</Link><Link className="text-link" to={sectionPaths.contact}>{t.contact}</Link></div></div>
         <div className="hero-visual"><div className="portrait-glow" /><div className="portrait-frame"><img src={portrait} alt={lang === 'fa' ? 'عباس روحانی‌تبار' : 'Abbas Rohani Tabar'} /></div><span className="floating-chip chip-top">{lang === 'fa' ? 'توسعه فرانت‌اند' : 'Frontend developer'}</span><span className="floating-chip chip-bottom"><span className="status-dot" /> {lang === 'fa' ? 'آماده همکاری' : 'Open to work'}</span></div>
       </section>
 
