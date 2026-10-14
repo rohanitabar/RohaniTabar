@@ -9,8 +9,8 @@ self.addEventListener('push', (event) => {
   const title = String(message.title || 'Abbas Rohani Tabar').slice(0, 90);
   const options = {
     body: String(message.body || '').slice(0, 240),
-    icon: new URL('/favicon-brand.jpg', self.location.origin).href,
-    badge: new URL('/favicon-brand.jpg', self.location.origin).href,
+    icon: new URL('/icons/brand.jpg', self.location.origin).href,
+    badge: new URL('/icons/brand.jpg', self.location.origin).href,
     data: { url: typeof message.url === 'string' ? message.url : '/' },
     // Unique tags keep ordinary updates from silently replacing an earlier notification.
     tag: `${message.kind === 'advertisement' ? 'sponsored' : 'site-update'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,

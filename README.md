@@ -18,6 +18,32 @@ A bilingual (Persian and English) personal portfolio built with React. It includ
 - PDF résumé upload with file size and PDF signature checks.
 - JSON file storage under `server/data` so portfolio content survives a restart.
 
+## Project structure
+
+```text
+src/
+  app/                 Application shell and portfolio page
+  assets/images/       Imported profile and brand images
+  components/ui/       Shared interface components
+  features/
+    admin/             Admin inboxes and issue reports
+    career/            Work history editor, timeline, and date helpers
+    editorial/         Blog and project presentation
+    notifications/     Web push subscription controls
+    projects/          Local demo deployment management
+  lib/                 Shared diagnostics and runtime utilities
+  styles/              Global and application stylesheets
+  index.js             React entry point
+  setupTests.js        Jest setup required by Create React App
+server/
+  index.js             HTTP API and file-backed content storage
+  deployments.js       Local project archive deployment and proxy logic
+scripts/               Local development and production preview commands
+public/                Static site assets, manifest, and service worker
+```
+
+Feature code lives together with its styles and focused tests. Shared UI pieces and utilities stay outside feature folders so they can be reused without creating circular imports.
+
 ## Requirements
 
 - Node.js 18 or newer

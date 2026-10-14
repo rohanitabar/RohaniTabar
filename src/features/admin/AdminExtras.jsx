@@ -1,9 +1,9 @@
 /* eslint-disable react/prop-types */
 import React, { useState } from 'react';
-import portrait from './components/Abbas.jpg';
-import { localized } from './Editorial';
-import SortableList from './SortableList';
-import { monitoredFetch } from './diagnostics';
+import portrait from '../../assets/images/Abbas.jpg';
+import { localized } from '../editorial/Editorial';
+import SortableList from '../../components/ui/SortableList';
+import { monitoredFetch } from '../../lib/diagnostics';
 
 async function request(url, options = {}) {
   const scope = url.includes('/ads') ? 'advertising' : url.includes('/messages') ? 'messages' : url.includes('/comments') ? 'comments' : 'notifications';

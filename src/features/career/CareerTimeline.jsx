@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import React from 'react';
-import AdaptiveLogo from './AdaptiveLogo';
+import AdaptiveLogo from '../../components/ui/AdaptiveLogo';
 import { careerPeriod, careerText, normalizeCareer } from './career';
 
 export function CareerTimeline({ career: rawCareer, lang = 'fa' }) {

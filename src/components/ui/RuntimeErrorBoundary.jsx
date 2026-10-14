@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import React from 'react';
-import { reportClientIssue } from './diagnostics';
+import { reportClientIssue } from '../../lib/diagnostics';
 
 export default class RuntimeErrorBoundary extends React.Component {
   constructor(props) {

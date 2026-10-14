@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
-import portrait from './components/Abbas.jpg';
+import portrait from '../../assets/images/Abbas.jpg';
 import './Editorial.css';
 
 export const localized = (value, lang) => typeof value === 'string' ? value : value?.[lang] || value?.en || value?.fa || '';

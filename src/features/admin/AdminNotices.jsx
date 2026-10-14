@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import React, { useCallback, useEffect, useState } from 'react';
-import { describeIssue } from './diagnostics';
+import { describeIssue } from '../../lib/diagnostics';
 
 export default function AdminNotices({ lang, onCountChange }) {
   const fa = lang === 'fa';

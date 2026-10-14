@@ -1,19 +1,19 @@
 /* eslint-disable react/prop-types */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
-import AdaptiveLogo from './AdaptiveLogo';
-import SortableList from './SortableList';
-import PushToggle from './PushNotifications';
-import ProjectDeployments from './ProjectDeployments';
-import { ArticleEditor, ArticlePage, BlogPage, PostPreview, ProjectCard, ProjectsPage, newestFirst } from './Editorial';
-import { AdminAd, AdminComments, AdminMessages, AdminPush } from './AdminExtras';
-import CareerAdmin from './CareerAdmin';
-import CareerTimeline from './CareerTimeline';
-import AdminNotices from './AdminNotices';
-import RuntimeErrorBoundary from './RuntimeErrorBoundary';
-import { monitoredFetch, reportClientIssue } from './diagnostics';
-import portrait from './components/Abbas.jpg';
-import logo from './components/Logo.jpg';
+import AdaptiveLogo from '../components/ui/AdaptiveLogo';
+import SortableList from '../components/ui/SortableList';
+import PushToggle from '../features/notifications/PushNotifications';
+import ProjectDeployments from '../features/projects/ProjectDeployments';
+import { ArticleEditor, ArticlePage, BlogPage, PostPreview, ProjectCard, ProjectsPage, newestFirst } from '../features/editorial/Editorial';
+import { AdminAd, AdminComments, AdminMessages, AdminPush } from '../features/admin/AdminExtras';
+import CareerAdmin from '../features/career/CareerAdmin';
+import CareerTimeline from '../features/career/CareerTimeline';
+import AdminNotices from '../features/admin/AdminNotices';
+import RuntimeErrorBoundary from '../components/ui/RuntimeErrorBoundary';
+import { monitoredFetch, reportClientIssue } from '../lib/diagnostics';
+import portrait from '../assets/images/Abbas.jpg';
+import logo from '../assets/images/Logo.jpg';
 
 const copy = {
     fa: {

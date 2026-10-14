@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import React from 'react';
-import { fromPersianMonth, persianMonthParts, toPersianMonth } from './career';
+import { fromPersianMonth, persianMonthParts, toPersianMonth } from '../../features/career/career';
 
 const persianMonths = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
 

@@ -1,8 +1,8 @@
 /* eslint-disable react/prop-types */
 import React, { useEffect, useRef, useState } from 'react';
-import CalendarMonthInput from './CalendarMonthInput';
+import CalendarMonthInput from '../../components/ui/CalendarMonthInput';
 import { careerPeriod, careerText, normalizeCareer } from './career';
-import { reportClientIssue } from './diagnostics';
+import { reportClientIssue } from '../../lib/diagnostics';
 
 const newId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 const CAREER_DRAFT_KEY = 'portfolio-career-draft-v1';

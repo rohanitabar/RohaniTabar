@@ -3,7 +3,7 @@
   "name": "Abbas Rohani Tabar Portfolio",
   "icons": [
     {
-      "src": "favicon-brand.jpg",
+      "src": "icons/brand.jpg",
       "type": "image/jpeg",
       "sizes": "2048x2048",
       "purpose": "any"

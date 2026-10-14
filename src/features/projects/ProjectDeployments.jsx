@@ -1,8 +1,8 @@
 /* eslint-disable react/prop-types */
 import React, { useEffect, useState } from 'react';
-import SortableList from './SortableList';
+import SortableList from '../../components/ui/SortableList';
 import './ProjectDeployments.css';
-import { monitoredFetch } from './diagnostics';
+import { monitoredFetch } from '../../lib/diagnostics';
 
 async function request(path, options = {}) {
   const response = await monitoredFetch(path, { credentials: 'same-origin', ...options }, 'projects');

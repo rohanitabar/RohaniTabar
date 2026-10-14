@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import React, { useEffect, useState } from 'react';
-import { monitoredFetch } from './diagnostics';
+import { monitoredFetch } from '../../lib/diagnostics';
 
 function decodeKey(value) {
   const normalized = `${value}${'='.repeat((4 - value.length % 4) % 4)}`.replace(/-/g, '+').replace(/_/g, '/');
