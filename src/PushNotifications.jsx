@@ -1,5 +1,6 @@
 /* eslint-disable react/prop-types */
 import React, { useEffect, useState } from 'react';
+import { monitoredFetch } from './diagnostics';
 
 function decodeKey(value) {
   const normalized = `${value}${'='.repeat((4 - value.length % 4) % 4)}`.replace(/-/g, '+').replace(/_/g, '/');
@@ -8,12 +9,12 @@ function decodeKey(value) {
 }
 
 async function sendSubscription(path, subscription) {
-  const response = await fetch(path, {
+  const response = await monitoredFetch(path, {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(subscription)
-  });
+  }, 'notifications');
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || 'Could not update notification settings.');
   return result;
@@ -33,7 +34,7 @@ export default function PushToggle({ lang, notify }) {
     setSupported(true);
     Promise.all([
       navigator.serviceWorker.register('/service-worker.js', { scope: '/' }),
-      fetch('/api/push/public-key', { credentials: 'same-origin' }).then(async (response) => {
+      monitoredFetch('/api/push/public-key', { credentials: 'same-origin' }, 'notifications').then(async (response) => {
         const result = await response.json();
         if (!response.ok || !result.publicKey) throw new Error('Push notifications are not configured.');
         return result.publicKey;

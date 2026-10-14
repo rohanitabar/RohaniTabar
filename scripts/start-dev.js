@@ -5,7 +5,7 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const apiPort = 5000;
-const expectedApiVersion = 21;
+const expectedApiVersion = 24;
 const uiPort = Number(process.env.UI_PORT || 3000);
 let ownedApi = null;
 let ui = null;

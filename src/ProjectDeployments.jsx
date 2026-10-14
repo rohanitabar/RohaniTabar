@@ -2,9 +2,10 @@
 import React, { useEffect, useState } from 'react';
 import SortableList from './SortableList';
 import './ProjectDeployments.css';
+import { monitoredFetch } from './diagnostics';
 
 async function request(path, options = {}) {
-  const response = await fetch(path, { credentials: 'same-origin', ...options });
+  const response = await monitoredFetch(path, { credentials: 'same-origin', ...options }, 'projects');
   const result = response.status === 204 ? {} : await response.json().catch(() => ({}));
   if (!response.ok) throw Object.assign(new Error(result.error || 'The request failed.'), { status: response.status });
   return result;

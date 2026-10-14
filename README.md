@@ -5,12 +5,15 @@ A bilingual (Persian and English) personal portfolio built with React. It includ
 ## Features
 
 - Persian RTL and English LTR layouts with a saved language preference.
+- A Persian and English introduction identifying Abbas Rohani Tabar, with an editable career history shown as a company and position timeline.
+- Career entries include company logos, company dates, position titles and descriptions, and position dates. Position text is translated locally to English. Current employment and active roles can be marked separately. When there is no work history, the owner can show a message about seeking hands-on and team experience.
 - Light and dark themes with a saved theme preference.
 - Responsive home page with the five newest articles and projects, plus separate magazine-style `/blog`, `/blog/:id`, and `/projects` pages. The header logo is also used as the browser favicon.
 - Contact form messages saved on the server and shown only in the authenticated admin panel. Visitors can leave an email address, phone number, or both for a manual reply.
 - Admin account setup with a private one-time setup key, scrypt password hashing, HTTP-only session cookies, and login rate limiting.
-- Admin tools to add, edit, and remove skills with logo URLs or image uploads, drag skills and footer social links into order, publish or edit bilingual blog posts, and publish or remove projects with demo and source links.
+- Admin tools to add, edit, and remove skills with logo URLs or image uploads, choose used skills for each project, drag skills and footer social links into order, publish or edit bilingual blog posts, and publish or remove projects with demo and source links.
 - Blog hashtags with filtered archive links, likes, comments, admin replies, and native share support. The share button copies a link when the browser does not support native sharing.
+- An authenticated admin issue inbox for server failures, browser runtime errors, and local translation failures. Notices show a plain-language summary, the affected section, the page path and optional technical details.
 - A managed image ad beneath the popular posts sidebar. When empty, it shows an advertising placeholder linked to WhatsApp.
 - PDF résumé upload with file size and PDF signature checks.
 - JSON file storage under `server/data` so portfolio content survives a restart.
@@ -106,3 +109,5 @@ The API is intentionally small and uses Node's built-in HTTP, crypto and filesys
 - `npm run build` — production React build
 - `npm run preview` — serve the production build and API
 - `npm test` — Create React App test runner
+
+GitHub Actions runs the test suite and production build on pushes and pull requests to `main` and `v2.0.0`. Enable repository notifications for failed workflow runs to receive email alerts. Runtime issue reports are stored with the site's admin data and appear in the **Issue reports** tab; they do not depend on running tests.

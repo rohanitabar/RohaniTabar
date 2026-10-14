@@ -1,0 +1,21 @@
+name: Portfolio checks
+
+on:
+  push:
+    branches: [main, v2.0.0]
+  pull_request:
+    branches: [main, v2.0.0]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test -- --watchAll=false --runInBand
+      - run: npm run build

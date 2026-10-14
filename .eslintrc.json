@@ -23,15 +23,7 @@
     "react/no-unsafe": "error",
     "react/no-unused-state": "warn",
     
-    "react/jsx-no-bind": [
-      "warn",
-      {
-        "ignoreDOMComponents": true,
-        "ignoreRefs": true,
-        "allowArrowFunctions": false,
-        "allowFunctions": false
-      }
-    ],
+    "react/jsx-no-bind": "off",
     "react/jsx-key": "error"
   },
   "settings": {

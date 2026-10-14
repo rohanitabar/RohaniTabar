@@ -15,12 +15,13 @@ const PUSH_SUBSCRIPTIONS_FILE = path.join(DATA_DIR, 'push-subscriptions.json');
 const PUSH_KEYS_FILE = path.join(DATA_DIR, 'push-keys.json');
 const UPLOAD_DIR = path.join(ROOT, 'public', 'uploads');
 const PORT = Number(process.env.PORT || 5000);
-const API_VERSION = 21;
+const API_VERSION = 24;
 const SESSION_COOKIE = 'portfolio_session';
 const SESSION_TTL = 7 * 24 * 60 * 60 * 1000;
 const sessions = new Map();
 const attempts = new Map();
 const contactAttempts = new Map();
+const clientErrorAttempts = new Map();
 let store = null;
 let saveChain = Promise.resolve();
 let pushSaveChain = Promise.resolve();
@@ -71,7 +72,9 @@ const seed = () => ({
   ],
   resume: null,
   ads: [],
-  messages: []
+  messages: [],
+  career: { noExperience: false, companies: [] },
+  notices: []
 });
 
 async function init() {
@@ -91,6 +94,10 @@ async function init() {
   }
   if (!Array.isArray(store.socials)) { store.socials = defaultSocials.map((account) => ({ ...account })); migrated = true; }
   if (!Array.isArray(store.messages)) { store.messages = []; migrated = true; }
+  if (!store.career || typeof store.career !== 'object') { store.career = { noExperience: false, companies: [] }; migrated = true; }
+  if (!Array.isArray(store.career.companies)) { store.career.companies = []; migrated = true; }
+  if (typeof store.career.noExperience !== 'boolean') { store.career.noExperience = false; migrated = true; }
+  if (!Array.isArray(store.notices)) { store.notices = []; migrated = true; }
   if (Array.isArray(store.posts)) {
     const usedSlugs = new Set();
     store.posts = store.posts.map((post) => {
@@ -140,7 +147,7 @@ function persistPushSubscriptions() {
 
 function persist() {
   const snapshot = JSON.stringify(store, null, 2);
-  saveChain = saveChain.then(async () => {
+  saveChain = saveChain.catch(() => {}).then(async () => {
     const temp = `${DATA_FILE}.${process.pid}.tmp`;
     await fsp.writeFile(temp, snapshot, { mode: 0o600 });
     await fsp.rename(temp, DATA_FILE);
@@ -233,6 +240,13 @@ async function projectInput(body, previous = null) {
   const demoUrl = Object.prototype.hasOwnProperty.call(body, 'demoUrl') ? safeUrl(body.demoUrl) : previous?.demoUrl || '';
   const repoUrl = Object.prototype.hasOwnProperty.call(body, 'repoUrl') ? safeUrl(body.repoUrl) : previous?.repoUrl || '';
   const image = Object.prototype.hasOwnProperty.call(body, 'image') ? safeImageUrl(body.image) : previous?.image || '';
+  const selectedSkillIds = Array.isArray(body.skillsUsed) ? [...new Set(body.skillsUsed.map((skillId) => clean(skillId, 80)).filter(Boolean))] : (previous?.skillsUsed || []).map((skill) => typeof skill === 'string' ? skill : skill.id).filter(Boolean);
+  if (selectedSkillIds.length > 30) throw Object.assign(new Error('Select up to 30 skills for a project.'), { status: 400 });
+  const skillsUsed = selectedSkillIds.map((skillId) => {
+    const skill = store.skills.find((item) => item.id === skillId);
+    if (!skill) throw Object.assign(new Error('A selected skill no longer exists. Refresh the page and try again.'), { status: 400 });
+    return { id: skill.id, name: skill.name, iconUrl: skill.iconUrl || '' };
+  });
   if (!Number.isInteger(containerPort) || containerPort < 1 || containerPort > 65535) throw Object.assign(new Error('Enter a valid app port between 1 and 65535.'), { status: 400 });
   if (serviceName && !/^[a-zA-Z0-9_-]{1,63}$/.test(serviceName)) throw Object.assign(new Error('Enter a valid Docker Compose service name.'), { status: 400 });
   const sources = { title: titleFa, description: descriptionFa };
@@ -249,12 +263,13 @@ async function projectInput(body, previous = null) {
     try {
       const translated = await translateToEnglish(fieldsToTranslate.map((field) => sources[field]));
       fieldsToTranslate.forEach((field, index) => { translations[field] = translated[index]; });
-    } catch (_) {
+    } catch (error) {
+      await recordNotice('translation', error.message, 'projectInput: translate Persian title and description', '/admin/projects');
       pendingFields = fieldsToTranslate;
       fieldsToTranslate.forEach((field) => { translations[field] = sources[field]; });
     }
   }
-  return { title: { fa: titleFa, en: translations.title }, description: { fa: descriptionFa, en: translations.description }, translationStatus: pendingFields.length ? 'pending' : 'translated', translationPendingFields: pendingFields, image, demoUrl, repoUrl, demoSubdomain, containerPort, serviceName };
+  return { title: { fa: titleFa, en: translations.title }, description: { fa: descriptionFa, en: translations.description }, translationStatus: pendingFields.length ? 'pending' : 'translated', translationPendingFields: pendingFields, image, demoUrl, repoUrl, skillsUsed, demoSubdomain, containerPort, serviceName };
 }
 const safeImageUrl = (value) => { const input = clean(value, 1000); if (/^\/uploads\/(?:skill-logo|social-logo|post-image|project-image|ad-image)-[A-Za-z0-9-]+\.(?:png|jpe?g|webp)$/.test(input) || /^\/icons\/(?:json|skill-default)\.svg$/.test(input)) return input; return safeUrl(input); };
 async function adInput(body, previous = null) {
@@ -265,7 +280,7 @@ async function adInput(body, previous = null) {
   let captionEn = previous?.captionEn || captionFa;
   if (!captionFa) captionEn = '';
   else if (captionFa !== previous?.captionFa) {
-    try { [captionEn] = await translateToEnglish([captionFa]); } catch (_) { captionEn = captionFa; }
+    try { [captionEn] = await translateToEnglish([captionFa]); } catch (error) { await recordNotice('translation', error.message, 'adInput: translate advertisement caption', '/admin/advertisements'); captionEn = captionFa; }
   }
   return { imageUrl, href, altFa: clean(body.altFa, 120), altEn: clean(body.altEn, 120), captionFa, captionEn };
 }
@@ -290,7 +305,112 @@ function visibleData(includeDrafts = false) {
     const publicDeployment = deployment ? { status: deployment.status || 'source-ready', subdomain: project.demoSubdomain || '', url: publicDemoUrl || '', uploadedAt: deployment.uploadedAt || '', deployedAt: deployment.deployedAt || '', error: includeDrafts ? deployment.error || '' : '' } : null;
     return { ...project, targetDemoUrl: project.demoUrl || '', deployment: publicDeployment };
   });
-  return { skills: store.skills, projects, posts: store.posts.filter((post) => includeDrafts || post.published).map((post) => ({ ...post, likes: Array.isArray(post.likes) ? post.likes.length : Number(post.likes || 0), comments: post.comments || [] })), socials: store.socials || defaultSocials, resume: store.resume, ads: (store.ads || []).map((ad) => ({ ...ad, href: ad.href || ad.url || ad.link || '' })), ...(includeDrafts ? { messages: store.messages } : {}) };
+  const career = store.career || { noExperience: false, companies: [] };
+  const publicCareer = !includeDrafts && career.noExperience ? { ...career, companies: [] } : career;
+  return { skills: store.skills, projects, posts: store.posts.filter((post) => includeDrafts || post.published).map((post) => ({ ...post, likes: Array.isArray(post.likes) ? post.likes.length : Number(post.likes || 0), comments: post.comments || [] })), socials: store.socials || defaultSocials, resume: store.resume, career: publicCareer, ads: (store.ads || []).map((ad) => ({ ...ad, href: ad.href || ad.url || ad.link || '' })), ...(includeDrafts ? { messages: store.messages } : {}) };
+}
+const issueScopes = new Set(['translation', 'projects', 'posts', 'skills', 'socials', 'experience', 'advertising', 'notifications', 'messages', 'comments', 'api', 'interface', 'runtime']);
+function normalizeIssueScope(scope) {
+  const aliases = { project: 'projects', post: 'posts', skill: 'skills', social: 'socials', career: 'experience' };
+  const normalized = aliases[scope] || scope;
+  return issueScopes.has(normalized) ? normalized : 'runtime';
+}
+function friendlyIssueMessage(scope) {
+  if (scope === 'translation') return { fa: 'ترجمهٔ خودکار انجام نشد. متن اصلی ذخیره شده و ترجمه در تلاش بعدی دوباره انجام می‌شود.', en: 'Automatic translation failed. The original text was saved and translation will be retried later.' };
+  if (scope === 'projects') return { fa: 'در مدیریت یا انتشار پروژه مشکلی رخ داده است.', en: 'A problem occurred while managing or publishing a project.' };
+  if (scope === 'posts') return { fa: 'در ذخیره یا نمایش نوشته مشکلی رخ داده است.', en: 'A problem occurred while saving or displaying a post.' };
+  if (scope === 'experience') return { fa: 'ذخیره یا نمایش سابقهٔ کاری با مشکل روبه‌رو شده است.', en: 'Work history could not be saved or displayed.' };
+  if (scope === 'skills') return { fa: 'در بارگذاری یا ذخیرهٔ مهارت‌ها مشکلی رخ داده است.', en: 'A problem occurred while loading or saving skills.' };
+  if (scope === 'socials') return { fa: 'در ذخیره یا نمایش پیوند شبکه‌های اجتماعی مشکلی رخ داده است.', en: 'A problem occurred while saving or displaying social links.' };
+  if (scope === 'advertising') return { fa: 'مدیریت جایگاه‌های تبلیغاتی با مشکل روبه‌رو شده است.', en: 'A problem occurred while managing advertising placements.' };
+  if (scope === 'notifications') return { fa: 'تنظیم یا ارسال اعلان با مشکل روبه‌رو شده است.', en: 'A problem occurred while configuring or sending notifications.' };
+  if (scope === 'messages') return { fa: 'مدیریت پیام‌های تماس با مشکل روبه‌رو شده است.', en: 'A problem occurred while managing contact messages.' };
+  if (scope === 'comments') return { fa: 'مدیریت دیدگاه‌ها با مشکل روبه‌رو شده است.', en: 'A problem occurred while managing comments.' };
+  if (scope === 'api') return { fa: 'ارتباط سایت با سرور با مشکل روبه‌رو شده است.', en: 'The website could not communicate with its server.' };
+  if (scope === 'interface') return { fa: 'در نمایش بخشی از سایت مشکلی رخ داده است.', en: 'A problem occurred while rendering part of the website.' };
+  return { fa: 'هنگام اجرای سایت مشکلی رخ داده است.', en: 'A problem occurred while the website was running.' };
+}
+async function recordNotice(scope, message, details = '', page = '/') {
+  if (!store) return null;
+  const normalizedScope = normalizeIssueScope(scope);
+  const cleanPage = `/${clean(page, 300).replace(/^\/+/, '').split(/[?#]/)[0]}`.replace(/^\/\/$/, '/') || '/';
+  const cleanMessage = clean(message, 500) || 'Unknown error';
+  const fingerprint = crypto.createHash('sha256').update(`${normalizedScope}|${cleanPage}|${cleanMessage}`).digest('hex');
+  const now = Date.now();
+  const prior = (store.notices || []).find((notice) => notice.fingerprint === fingerprint);
+  const recentActive = prior && !prior.resolvedAt && now - new Date(prior.createdAt).getTime() < 15 * 60 * 1000;
+  const recentlyResolved = prior?.resolvedAt && now - new Date(prior.resolvedAt).getTime() < 15 * 60 * 1000;
+  if (recentActive || recentlyResolved) { prior.count = Math.min(999, Number(prior.count || 1) + 1); prior.lastSeenAt = new Date().toISOString(); try { await persist(); } catch (error) { console.error('Could not persist issue report:', error.message); } return prior; }
+  const notice = { id: id(), scope: normalizedScope, message: cleanMessage, details: clean(details, 1200), page: cleanPage, fingerprint, count: 1, createdAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(), friendlyMessage: friendlyIssueMessage(normalizedScope) };
+  store.notices = [notice, ...(store.notices || [])].slice(0, 100);
+  try { await persist(); } catch (error) { console.error('Could not persist issue report:', error.message); }
+  return notice;
+}
+async function validateCareer(body) {
+  const month = (value) => {
+    const date = clean(value, 10);
+    if (!date) return date;
+    const match = /^(\d{4})-(0[1-9]|1[0-2])(?:-(0[1-9]|[12]\d|3[01]))?$/.exec(date);
+    if (!match) return null;
+    if (match[3]) {
+      const parsed = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+      if (parsed.getUTCFullYear() !== Number(match[1]) || parsed.getUTCMonth() !== Number(match[2]) - 1 || parsed.getUTCDate() !== Number(match[3])) return null;
+    }
+    return date;
+  };
+  const previousCompanies = store?.career?.companies || [];
+  const suppliedCompanies = Array.isArray(body.companies) ? body.companies : [];
+  const companies = body.noExperience === true ? previousCompanies : suppliedCompanies;
+  if (companies.length > 30) throw Object.assign(new Error('You can add up to 30 companies.'), { status: 400 });
+  const cleanPeriod = (item, label) => {
+    const startDate = month(item.startDate);
+    const endDate = month(item.endDate);
+    if (startDate === null || endDate === null) throw Object.assign(new Error(`Enter valid ${label} dates using month and year.`), { status: 400 });
+    if (startDate && endDate && !item.isCurrent && endDate.slice(0, 7) < startDate.slice(0, 7)) throw Object.assign(new Error(`The ${label} end date must be after its start date.`), { status: 400 });
+    return { startDate, endDate: item.isCurrent ? '' : endDate, isCurrent: item.isCurrent === true };
+  };
+  const result = {
+    noExperience: body.noExperience === true,
+    companies: companies.map((company) => {
+      const name = clean(company.name, 100);
+      if (!name) throw Object.assign(new Error('Enter a company name.'), { status: 400 });
+      const roles = Array.isArray(company.roles) ? company.roles : [];
+      if (roles.length > 20) throw Object.assign(new Error('A company can have up to 20 positions.'), { status: 400 });
+      const previousCompany = previousCompanies.find((item) => item.id === company.id);
+      return { id: clean(company.id, 80) || id(), name, logoUrl: safeImageUrl(company.logoUrl), ...cleanPeriod(company, 'company'), roles: roles.map((role) => {
+        const titleFa = clean(typeof role.title === 'object' ? role.title.fa : role.title, 100);
+        const descriptionFa = clean(typeof role.description === 'object' ? role.description.fa : role.description, 1200);
+        if (!titleFa) throw Object.assign(new Error('Enter a position title.'), { status: 400 });
+        const previousRole = previousCompany?.roles?.find((item) => item.id === role.id);
+        const titleEn = previousRole?.title?.fa === titleFa ? previousRole.title.en : '';
+        const descriptionEn = previousRole?.description?.fa === descriptionFa ? previousRole.description.en : '';
+        const rawTechnologies = Array.isArray(role.technologiesUsed) ? role.technologiesUsed : previousRole?.technologiesUsed || [];
+        if (rawTechnologies.length > 30) throw Object.assign(new Error('Select up to 30 technologies for a position.'), { status: 400 });
+        const technologiesUsed = [...new Set(rawTechnologies.map((technology) => clean(typeof technology === 'string' ? technology : technology?.id, 80)).filter(Boolean))].map((technologyId) => {
+          const skill = store.skills.find((item) => item.id === technologyId);
+          const previousTechnology = previousRole?.technologiesUsed?.find((item) => item.id === technologyId);
+          if (!skill && !previousTechnology) throw Object.assign(new Error('A selected technology no longer exists. Refresh the page and try again.'), { status: 400 });
+          const source = skill || previousTechnology;
+          return { id: technologyId, name: source.name, iconUrl: source.iconUrl || '' };
+        });
+        return { id: clean(role.id, 80) || id(), title: { fa: titleFa, en: titleEn }, description: { fa: descriptionFa, en: descriptionEn }, technologiesUsed, ...cleanPeriod(role, 'position') };
+      }) };
+    })
+  };
+  const fieldsToTranslate = result.companies.flatMap((company) => company.roles.flatMap((role) => [
+    ...(!role.title.en ? [{ role, field: 'title', value: role.title.fa }] : []),
+    ...(!role.description.en && role.description.fa ? [{ role, field: 'description', value: role.description.fa }] : [])
+  ]));
+  if (fieldsToTranslate.length) {
+    try {
+      const translations = await translateToEnglish(fieldsToTranslate.map((field) => field.value));
+      fieldsToTranslate.forEach((field, index) => { field.role[field.field].en = translations[index]; });
+    } catch (error) {
+      await recordNotice('translation', error.message, 'validateCareer: translate position title and description', '/admin/career');
+      fieldsToTranslate.forEach((field) => { field.role[field.field].en = field.value; });
+    }
+  }
+  return result;
 }
 function parseTags(value) {
   const tags = [...new Set(clean(value, 500).split(/[,\u060c\n]+/).map((tag) => tag.trim().replace(/^#+/, '').replace(/\s+/g, '_')).filter(Boolean))];
@@ -416,7 +536,8 @@ async function validatePost(body, previous = null) {
   if (fieldsToTranslate.length) {
     try {
       Object.assign(translations, await translatePostFields(fieldsToTranslate, sources));
-    } catch (_) {
+    } catch (error) {
+      await recordNotice('translation', error.message, `validatePost: translate fields ${fieldsToTranslate.join(', ')}`, '/admin/posts');
       pendingFields = fieldsToTranslate;
       fieldsToTranslate.forEach((field) => { translations[field] = sources[field]; });
     }
@@ -504,6 +625,17 @@ async function handle(req, res) {
   try {
     if (method === 'GET' && pathname === '/api/health') return json(res, 200, { ok: true, apiVersion: API_VERSION });
     if (method === 'GET' && pathname === '/api/site-data') return json(res, 200, visibleData(Boolean(sessionFor(req))));
+    if (pathname === '/api/client-errors' && method === 'POST') {
+      const ip = req.socket.remoteAddress || 'unknown';
+      const current = clientErrorAttempts.get(ip) || { count: 0, resetAt: Date.now() + 60 * 60 * 1000 };
+      if (current.resetAt < Date.now()) { current.count = 0; current.resetAt = Date.now() + 60 * 60 * 1000; }
+      if (++current.count > 30) return json(res, 429, { error: 'Issue report limit reached.' });
+      clientErrorAttempts.set(ip, current);
+      const body = await readJson(req, 4000);
+      const scope = normalizeIssueScope(body.scope);
+      await recordNotice(scope, body.message, body.details, body.page);
+      return json(res, 202, { recorded: true });
+    }
     if (method === 'GET' && pathname === '/api/push/public-key') return json(res, 200, { publicKey: pushPublicKey });
     if (pathname === '/api/push/subscribe' && method === 'POST') {
       const subscription = await readJson(req, 12000);
@@ -600,6 +732,20 @@ async function handle(req, res) {
       return json(res, 404, { error: 'Not found.' });
     }
     if (!requireAdmin(req, res)) return;
+    if (pathname === '/api/admin/notices' && method === 'GET') return json(res, 200, { notices: (store.notices || []).filter((notice) => !notice.resolvedAt) });
+    const noticeMatch = pathname.match(/^\/api\/admin\/notices\/([^/]+)$/);
+    if (noticeMatch && (method === 'PATCH' || method === 'DELETE')) {
+      const notice = (store.notices || []).find((item) => item.id === decodeURIComponent(noticeMatch[1]));
+      if (!notice) return json(res, 404, { error: 'Issue report not found.' });
+      notice.resolvedAt = new Date().toISOString();
+      await persist();
+      return json(res, 200, { resolved: true });
+    }
+    if (pathname === '/api/admin/career' && method === 'PUT') {
+      store.career = await validateCareer(await readJson(req, 50000));
+      await persist();
+      return json(res, 200, { career: store.career });
+    }
     if (pathname === '/api/admin/push' && method === 'POST') {
       const body = await readJson(req, 5000);
       const title = clean(body.title, 90);
@@ -857,6 +1003,7 @@ async function handle(req, res) {
     if (res.headersSent || res.destroyed) return;
     if (error instanceof TypeError && /URL/.test(error.message)) return json(res, 400, { error: 'Enter a valid HTTP or HTTPS URL.' });
     if (error.status) return json(res, error.status, { error: error.message });
+    await recordNotice(pathname.includes('/posts') ? 'posts' : pathname.includes('/projects') ? 'projects' : pathname.includes('/career') ? 'experience' : pathname.includes('/translate') ? 'translation' : 'api', error.message || 'Server request failed.', error.stack || '', pathname);
     console.error(error);
     return json(res, 500, { error: error.message || 'The server could not complete the request.' });
   }

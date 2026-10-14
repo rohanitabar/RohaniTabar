@@ -3,9 +3,11 @@ import React, { useState } from 'react';
 import portrait from './components/Abbas.jpg';
 import { localized } from './Editorial';
 import SortableList from './SortableList';
+import { monitoredFetch } from './diagnostics';
 
 async function request(url, options = {}) {
-  const response = await fetch(url, { credentials: 'same-origin', ...options });
+  const scope = url.includes('/ads') ? 'advertising' : url.includes('/messages') ? 'messages' : url.includes('/comments') ? 'comments' : 'notifications';
+  const response = await monitoredFetch(url, { credentials: 'same-origin', ...options }, scope);
   const result = response.status === 204 ? {} : await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || 'Request failed.');
   return result;
