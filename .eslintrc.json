@@ -1,0 +1,42 @@
+{
+  "env": {
+    "browser": true,
+    "es2021": true,
+    "node": true
+  },
+  "extends": [
+    "eslint:recommended",
+    "plugin:react/recommended",
+    "plugin:react-hooks/recommended",
+    "plugin:jsx-a11y/recommended"
+  ],
+  "parserOptions": {
+    "ecmaFeatures": {
+      "jsx": true
+    },
+    "ecmaVersion": 12,
+    "sourceType": "module"
+  },
+  "plugins": ["react", "react-hooks", "jsx-a11y"],
+  "rules": {
+
+    "react/no-unsafe": "error",
+    "react/no-unused-state": "warn",
+    
+    "react/jsx-no-bind": [
+      "warn",
+      {
+        "ignoreDOMComponents": true,
+        "ignoreRefs": true,
+        "allowArrowFunctions": false,
+        "allowFunctions": false
+      }
+    ],
+    "react/jsx-key": "error"
+  },
+  "settings": {
+    "react": {
+      "version": "detect" 
+    }
+  }
+}

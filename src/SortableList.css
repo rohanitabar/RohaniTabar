@@ -1,0 +1,12 @@
+.admin-card>.sort-hint{color:var(--muted);font-size:11px;line-height:1.7;margin:17px 0 2px}
+.sortable-list li{gap:10px;transition:background .16s,box-shadow .16s;border-radius:8px}
+.sortable-list li.sortable-active{background:var(--surface-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+.admin-list .drag-handle{flex:0 0 34px;min-width:34px;min-height:38px;display:grid;place-items:center;border:1px solid var(--line);border-radius:8px;background:var(--surface-soft);color:var(--muted);font-size:20px;line-height:1;cursor:grab;touch-action:none;user-select:none}
+.admin-list .drag-handle:active{cursor:grabbing}
+.admin-list .drag-handle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sortable-list .admin-skill,.sortable-list .admin-social{flex:1;min-width:0}
+.sortable-list .admin-social span{overflow-wrap:anywhere}
+.sortable-list li>span:first-of-type{flex:1;min-width:0}
+.deployment-manager .sortable-list>li{align-items:stretch}
+.deployment-manager .sortable-list .deployment-project{flex:1;min-width:0;margin:0;border:0;padding:0;background:transparent}
+@media(max-width:520px){.sortable-list li{flex-wrap:wrap}.sortable-list .post-admin-actions{margin-inline-start:auto}}
