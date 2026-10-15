@@ -25,6 +25,19 @@
 .about-notes>div{grid-template-columns:1fr;gap:0}
 .skill-logo-wrap{margin-top:0}
 .admin-list .reorder-action{font-size:12px;font-weight:700}
+.admin-list .demo-toggle-action{min-width:62px;min-height:32px;padding:5px 9px;border:1px solid color-mix(in srgb,#c05249 45%,var(--line));border-radius:8px;background:var(--surface);color:#b8443d;font-size:11px;font-weight:700;cursor:pointer}
+.admin-list .demo-toggle-action.is-active{border-color:color-mix(in srgb,#568d65 50%,var(--line));color:#568d65}
+.admin-list .demo-toggle-action:disabled{opacity:.5;cursor:not-allowed}
+.admin-grid{gap:23px}
+.admin-card{padding:30px}
+.admin-tabs{gap:12px;margin-bottom:24px}
+.admin-list{margin-top:21px}
+.admin-list li{padding-block:14px}
+.field-label{margin-block:19px}
+@media(max-width:680px){.admin-card{padding:22px}.admin-grid{gap:16px}}
+.field-label input:disabled,.field-label textarea:disabled,.field-label select:disabled{opacity:.55;cursor:not-allowed;background:var(--surface-soft)}
+.project-featured-toggle{margin-block:18px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface-soft)}
+.project-deployment-error{max-width:420px;overflow-wrap:anywhere;color:#b8443d!important}
 @media(max-width:680px){.intro-inner,.section-heading{grid-template-columns:1fr}}
 .contact-honeypot{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .admin-inline-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px}
@@ -87,6 +100,8 @@
 .contact-inner .resume-link{background:#c9fa78;color:#14200c;font-weight:800;border:2px solid #efffcf;text-shadow:none}.contact-inner .resume-link:hover{background:#b8ef62;color:#14200c}.back-to-top{position:fixed;inset-inline-end:24px;bottom:24px;z-index:45;width:50px;height:50px;display:grid;place-items:center;border:1px solid color-mix(in srgb,var(--ink) 18%,transparent);border-radius:50%;background:var(--accent);color:var(--accent-ink);box-shadow:0 8px 24px rgba(0,0,0,.22);cursor:pointer;transition:transform .2s,opacity .2s}.back-to-top:hover{transform:translateY(-3px)}.back-to-top svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}@media(max-width:680px){.back-to-top{inset-inline-end:16px;bottom:16px;width:46px;height:46px}.contact-inner .resume-link{font-size:15px;padding:16px 22px}}
 
 .topbar{transition:transform .22s ease,background .25s,color .25s}.topbar.is-hidden{transform:translateY(-110%);pointer-events:none}
+
+@media(max-width:760px){.topbar.menu-open{position:fixed;top:0;inset-inline:0;transform:none;pointer-events:auto}.topbar.menu-open .main-nav{max-height:calc(100dvh - 82px);overscroll-behavior:contain}}
 
 .skill-card{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:178px;padding:22px;text-align:center;gap:14px;transition:transform .2s,border-color .2s,box-shadow .2s}.skill-card:hover{transform:translateY(-4px);border-color:color-mix(in srgb,var(--accent) 60%,var(--line));box-shadow:0 14px 30px rgba(25,45,32,.1)}.skill-logo-wrap{width:76px;height:76px;flex:0 0 76px;margin:0;border-radius:20px}.skill-logo{width:56px;height:56px}.skill-card h3{margin:0;font-size:15px;line-height:1.4}@media(max-width:680px){.skill-card{min-height:158px;padding:16px;gap:11px}.skill-logo-wrap{width:68px;height:68px;flex-basis:68px;border-radius:18px}.skill-logo{width:50px;height:50px}.skill-card h3{font-size:14px}}
 

@@ -7,7 +7,6 @@ const zlib = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const yaml = require('js-yaml');
-
 const execFileAsync = promisify(execFile);
 const DEPLOYMENTS_DIR = path.join(__dirname, 'data', 'deployments');
 const MAX_ARCHIVE_BYTES = 150 * 1024 * 1024;
@@ -42,7 +41,7 @@ function safeArchivePath(rawName) {
 
 async function extractZip(buffer, destination) {
   if (!Buffer.isBuffer(buffer) || buffer.length < 22 || buffer.length > MAX_ARCHIVE_BYTES || buffer.readUInt32LE(0) !== 0x04034b50) {
-    throw Object.assign(new Error('Upload a valid ZIP source archive (maximum 150 MB).'), { status: 400 });
+    throw Object.assign(new Error('GitHub returned an invalid source archive (maximum 150 MB).'), { status: 400 });
   }
   let endOffset = -1;
   const searchStart = Math.max(0, buffer.length - 65557);
@@ -111,6 +110,35 @@ async function extractZip(buffer, destination) {
   }
 }
 
+async function githubArchive(repositoryUrl, branch = '') {
+  let parsed;
+  try { parsed = new URL(repositoryUrl); } catch (_) { throw Object.assign(new Error('Enter a public GitHub repository URL.'), { status: 400 }); }
+  const parts = parsed.pathname.split('/').filter(Boolean);
+  if (parsed.hostname !== 'github.com' || parts.length < 2 || !/^[\w.-]+$/.test(parts[0]) || !/^[\w.-]+$/.test(parts[1].replace(/\.git$/, ''))) {
+    throw Object.assign(new Error('Use a public repository link in the form https://github.com/owner/repository.'), { status: 400 });
+  }
+  const owner = parts[0];
+  const repo = parts[1].replace(/\.git$/, '');
+  const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+  const metadataResponse = await fetch(apiUrl, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'RohaniTabar-Portfolio' }, signal: AbortSignal.timeout(30000) });
+  if (!metadataResponse.ok) throw Object.assign(new Error(metadataResponse.status === 404 ? 'GitHub repository was not found or is private.' : `GitHub could not read the repository (HTTP ${metadataResponse.status}).`), { status: 400 });
+  const metadata = await metadataResponse.json();
+  const selectedBranch = String(branch || metadata.default_branch || '').trim();
+  if (!selectedBranch || selectedBranch.length > 200 || selectedBranch.startsWith('-') || selectedBranch.includes('..')) throw Object.assign(new Error('Enter a valid GitHub branch name.'), { status: 400 });
+  const archiveResponse = await fetch(`https://codeload.github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/zip/refs/heads/${selectedBranch.split('/').map(encodeURIComponent).join('/')}`, { headers: { 'User-Agent': 'RohaniTabar-Portfolio' }, signal: AbortSignal.timeout(120000) });
+  if (!archiveResponse.ok) throw Object.assign(new Error(`GitHub could not download branch “${selectedBranch}” (HTTP ${archiveResponse.status}).`), { status: 400 });
+  const declaredLength = Number(archiveResponse.headers.get('content-length') || 0);
+  if (declaredLength > MAX_ARCHIVE_BYTES) throw Object.assign(new Error('The GitHub source archive is larger than 150 MB.'), { status: 413 });
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of archiveResponse.body) {
+    total += chunk.length;
+    if (total > MAX_ARCHIVE_BYTES) throw Object.assign(new Error('The GitHub source archive is larger than 150 MB.'), { status: 413 });
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
 async function docker(args, options = {}) {
   try {
     const result = await execFileAsync('docker', args, { cwd: options.cwd, timeout: options.timeout || 10 * 60 * 1000, maxBuffer: 3 * 1024 * 1024, windowsHide: true });
@@ -143,7 +171,8 @@ function validateCompose(compose, root) {
       if (typeof volume === 'string') {
         const source = volume.split(':')[0];
         if (source.startsWith('.') || source.startsWith('/') || source.startsWith('~') || /^[a-z]:/i.test(source)) throw Object.assign(new Error('Compose bind mounts from the host are blocked for isolation.'), { status: 400 });
-      } else if (volume?.type === 'bind') throw Object.assign(new Error('Compose bind mounts from the host are blocked for isolation.'), { status: 400 });
+      }
+      else if (volume?.type === 'bind') throw Object.assign(new Error('Compose bind mounts from the host are blocked for isolation.'), { status: 400 });
     }
     for (const envFile of [].concat(service.env_file || [])) {
       const filename = typeof envFile === 'string' ? envFile : envFile?.path;
@@ -173,15 +202,23 @@ async function removeRuntime(project) {
 
 async function deployProject(project, port) {
   const deployment = project.deployment;
-  const archiveFile = deployment?.archiveFile ? path.resolve(__dirname, '..', deployment.archiveFile) : '';
-  if (!archiveFile || !archiveFile.startsWith(`${DEPLOYMENTS_DIR}${path.sep}`) || !fs.existsSync(archiveFile)) throw Object.assign(new Error('Upload a ZIP source project first.'), { status: 400 });
+  if (!project?.repoUrl) throw Object.assign(new Error('Add a public GitHub repository URL to this project first.'), { status: 400 });
   const baseDir = path.join(DEPLOYMENTS_DIR, project.id);
+  await fsp.mkdir(baseDir, { recursive: true });
+  await fsp.rm(path.join(baseDir, 'source.zip'), { force: true });
+  const archive = await githubArchive(project.repoUrl, project.demoBranch);
+  if (archive.length < 4 || archive.readUInt32LE(0) !== 0x04034b50) throw Object.assign(new Error('GitHub did not return a valid source archive.'), { status: 400 });
   const sourceDir = path.join(baseDir, 'source');
   await removeRuntime(project);
   await fsp.rm(sourceDir, { recursive: true, force: true });
-  await extractZip(await fsp.readFile(archiveFile), sourceDir);
+  await extractZip(archive, sourceDir);
   const rootEntries = await fsp.readdir(sourceDir, { withFileTypes: true });
   const buildRoot = rootEntries.length === 1 && rootEntries[0].isDirectory() ? path.join(sourceDir, rootEntries[0].name) : sourceDir;
+  const staticIndex = ['.', 'dist', 'build', 'out'].map((folder) => path.join(buildRoot, folder, 'index.html')).find((filename) => fs.existsSync(filename));
+  if (project.projectType === 'static') {
+    if (!staticIndex) throw Object.assign(new Error('This static repository has no index.html at its root or inside dist, build or out.'), { status: 400 });
+    return { runtimeKind: 'static', runtimeName: '', localPort: 0, sourceDir: path.dirname(staticIndex), composeFile: '' };
+  }
   const composeName = ['compose.yaml', 'compose.yml', 'docker-compose.yaml', 'docker-compose.yml'].find((name) => fs.existsSync(path.join(buildRoot, name)));
   let runtimeName = `rohani-${project.id.replace(/[^a-z0-9]/gi, '').slice(0, 18).toLowerCase()}`;
   let localPort = 0;
@@ -190,8 +227,7 @@ async function deployProject(project, port) {
     const composeFile = path.join(buildRoot, composeName);
     const config = yaml.safeLoad(await fsp.readFile(composeFile, 'utf8'));
     validateCompose(config, buildRoot);
-    const requestedService = deployment.serviceName;
-    const serviceName = requestedService || (Object.keys(config.services).length === 1 ? Object.keys(config.services)[0] : '');
+    const serviceName = deployment.serviceName || (Object.keys(config.services).length === 1 ? Object.keys(config.services)[0] : '');
     if (!serviceName || !config.services[serviceName]) throw Object.assign(new Error('Enter the web service name from your Compose file.'), { status: 400 });
     const overrideFile = path.join(buildRoot, '.rohani-compose.override.yml');
     await fsp.writeFile(overrideFile, `services:\n  ${serviceName}:\n    ports:\n      - "127.0.0.1::${port}"\n`);
@@ -209,12 +245,7 @@ async function deployProject(project, port) {
       const output = await docker(['port', runtimeName, `${port}/tcp`]);
       localPort = Number(output.trim().split(':').pop());
       deployment.imageName = imageName;
-    } else if (fs.existsSync(path.join(buildRoot, 'index.html')) && !fs.existsSync(path.join(buildRoot, 'package.json'))) {
-      runtimeKind = 'static';
-      runtimeName = '';
-    } else {
-      throw Object.assign(new Error('This project needs a Dockerfile or Compose file. Plain static sites can be uploaded with a root index.html and no package.json.'), { status: 400 });
-    }
+    } else throw Object.assign(new Error('This dynamic project needs a Dockerfile or Docker Compose file at the repository root.'), { status: 400 });
   }
   if (runtimeKind !== 'static' && (!Number.isInteger(localPort) || localPort < 1 || localPort > 65535)) throw Object.assign(new Error('The container started, but its local port could not be detected.'), { status: 500 });
   return { runtimeKind, runtimeName, localPort, sourceDir: buildRoot, composeFile: deployment.composeFile || '' };

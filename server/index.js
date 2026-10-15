@@ -6,7 +6,7 @@ const fsp = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const webPush = require('web-push');
-const { DEPLOYMENTS_DIR, MAX_ARCHIVE_BYTES, validateSubdomain, deployProject, removeRuntime, proxyRequest, deploymentForHost } = require('./deployments');
+const { DEPLOYMENTS_DIR, validateSubdomain, deployProject, removeRuntime, proxyRequest, deploymentForHost } = require('./deployments');
 
 const ROOT = path.resolve(__dirname, '..');
 const DATA_DIR = path.join(__dirname, 'data');
@@ -22,6 +22,7 @@ const sessions = new Map();
 const attempts = new Map();
 const contactAttempts = new Map();
 const clientErrorAttempts = new Map();
+const dataEventClients = new Set();
 let store = null;
 let saveChain = Promise.resolve();
 let pushSaveChain = Promise.resolve();
@@ -98,6 +99,13 @@ async function init() {
   if (!Array.isArray(store.career.companies)) { store.career.companies = []; migrated = true; }
   if (typeof store.career.noExperience !== 'boolean') { store.career.noExperience = false; migrated = true; }
   if (!Array.isArray(store.notices)) { store.notices = []; migrated = true; }
+  if (Array.isArray(store.projects)) {
+    store.projects = store.projects.map((project) => {
+      if (project.projectType === 'static' || project.projectType === 'dynamic') return project;
+      migrated = true;
+      return { ...project, projectType: project.deployment?.runtimeKind === 'static' ? 'static' : 'dynamic' };
+    });
+  }
   if (Array.isArray(store.posts)) {
     const usedSlugs = new Set();
     store.posts = store.posts.map((post) => {
@@ -151,8 +159,33 @@ function persist() {
     const temp = `${DATA_FILE}.${process.pid}.tmp`;
     await fsp.writeFile(temp, snapshot, { mode: 0o600 });
     await fsp.rename(temp, DATA_FILE);
+    broadcastDataChanged();
   });
   return saveChain;
+}
+
+function broadcastDataChanged() {
+  for (const client of dataEventClients) {
+    if (client.destroyed || client.writableEnded) { dataEventClients.delete(client); continue; }
+    client.write('event: data-change\ndata: {}\n\n');
+  }
+}
+
+function streamDataEvents(res) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+  res.write('retry: 3000\n: connected\n\n');
+  dataEventClients.add(res);
+  const heartbeat = setInterval(() => {
+    if (!res.destroyed && !res.writableEnded) res.write(': keep-alive\n\n');
+  }, 25000);
+  heartbeat.unref?.();
+  const close = () => { clearInterval(heartbeat); dataEventClients.delete(res); };
+  res.on('close', close);
 }
 
 function reorderByIds(items, ids) {
@@ -235,6 +268,10 @@ async function projectInput(body, previous = null) {
   const descriptionFa = clean(body.descriptionFa, 800);
   if (!titleFa || !descriptionFa) throw Object.assign(new Error('Complete the Persian project title and description.'), { status: 400 });
   const demoSubdomain = body.demoSubdomain ? validateSubdomain(body.demoSubdomain) : previous?.demoSubdomain || '';
+  const demoBranch = clean(Object.prototype.hasOwnProperty.call(body, 'demoBranch') ? body.demoBranch : previous?.demoBranch || '', 200);
+  const projectType = body.projectType === 'dynamic' ? 'dynamic' : body.projectType === 'static' ? 'static' : previous?.projectType || (previous?.deployment?.runtimeKind === 'static' ? 'static' : 'dynamic');
+  const featured = Object.prototype.hasOwnProperty.call(body, 'featured') ? body.featured === true || body.featured === 'on' : previous?.featured !== false;
+  const demoEnabled = Object.prototype.hasOwnProperty.call(body, 'demoEnabled') ? body.demoEnabled === true || body.demoEnabled === 'on' : Boolean(previous?.demoEnabled || previous?.deployment?.status === 'running');
   const containerPort = body.containerPort ? Number(body.containerPort) : previous?.containerPort || 3000;
   const serviceName = body.serviceName !== undefined ? clean(body.serviceName, 63) : previous?.serviceName || '';
   const demoUrl = Object.prototype.hasOwnProperty.call(body, 'demoUrl') ? safeUrl(body.demoUrl) : previous?.demoUrl || '';
@@ -249,6 +286,7 @@ async function projectInput(body, previous = null) {
   });
   if (!Number.isInteger(containerPort) || containerPort < 1 || containerPort > 65535) throw Object.assign(new Error('Enter a valid app port between 1 and 65535.'), { status: 400 });
   if (serviceName && !/^[a-zA-Z0-9_-]{1,63}$/.test(serviceName)) throw Object.assign(new Error('Enter a valid Docker Compose service name.'), { status: 400 });
+  if (demoEnabled && (!repoUrl || !demoSubdomain)) throw Object.assign(new Error('To enable the demo, add a public GitHub repository URL and subdomain.'), { status: 400 });
   const sources = { title: titleFa, description: descriptionFa };
   const previousPending = Array.isArray(previous?.translationPendingFields) ? previous.translationPendingFields : previous?.translationStatus === 'pending' ? ['title', 'description'] : [];
   const translations = {};
@@ -269,7 +307,7 @@ async function projectInput(body, previous = null) {
       fieldsToTranslate.forEach((field) => { translations[field] = sources[field]; });
     }
   }
-  return { title: { fa: titleFa, en: translations.title }, description: { fa: descriptionFa, en: translations.description }, translationStatus: pendingFields.length ? 'pending' : 'translated', translationPendingFields: pendingFields, image, demoUrl, repoUrl, skillsUsed, demoSubdomain, containerPort, serviceName };
+  return { title: { fa: titleFa, en: translations.title }, description: { fa: descriptionFa, en: translations.description }, featured, translationStatus: pendingFields.length ? 'pending' : 'translated', translationPendingFields: pendingFields, image, demoUrl, repoUrl, skillsUsed, demoSubdomain, demoBranch, projectType, demoEnabled, containerPort, serviceName };
 }
 const safeImageUrl = (value) => { const input = clean(value, 1000); if (/^\/uploads\/(?:skill-logo|social-logo|post-image|project-image|ad-image)-[A-Za-z0-9-]+\.(?:png|jpe?g|webp)$/.test(input) || /^\/icons\/(?:json|skill-default)\.svg$/.test(input)) return input; return safeUrl(input); };
 async function adInput(body, previous = null) {
@@ -303,7 +341,7 @@ function visibleData(includeDrafts = false) {
     const localDemoUrl = deployment?.localUrl || '';
     const publicDemoUrl = deployment?.status === 'running' ? (process.env.NODE_ENV === 'production' ? project.demoUrl || deployment.url || '' : localDemoUrl) : project.demoUrl;
     const publicDeployment = deployment ? { status: deployment.status || 'source-ready', subdomain: project.demoSubdomain || '', url: publicDemoUrl || '', uploadedAt: deployment.uploadedAt || '', deployedAt: deployment.deployedAt || '', error: includeDrafts ? deployment.error || '' : '' } : null;
-    return { ...project, targetDemoUrl: project.demoUrl || '', deployment: publicDeployment };
+    return { ...project, projectType: project.projectType || (deployment?.runtimeKind === 'static' ? 'static' : 'dynamic'), targetDemoUrl: project.demoUrl || '', deployment: publicDeployment };
   });
   const career = store.career || { noExperience: false, companies: [] };
   const publicCareer = !includeDrafts && career.noExperience ? { ...career, companies: [] } : career;
@@ -624,6 +662,7 @@ async function handle(req, res) {
   if (pathname.startsWith('/api/') && !requireOrigin(req, res)) return;
   try {
     if (method === 'GET' && pathname === '/api/health') return json(res, 200, { ok: true, apiVersion: API_VERSION });
+    if (method === 'GET' && pathname === '/api/events') return streamDataEvents(res);
     if (method === 'GET' && pathname === '/api/site-data') return json(res, 200, visibleData(Boolean(sessionFor(req))));
     if (pathname === '/api/client-errors' && method === 'POST') {
       const ip = req.socket.remoteAddress || 'unknown';
@@ -789,7 +828,7 @@ async function handle(req, res) {
       await fsp.writeFile(path.join(UPLOAD_DIR, filename), bytes, { flag: 'wx' });
       return json(res, 201, { url: `/uploads/${filename}` });
     }
-    const deploymentAction = pathname.match(/^\/api\/admin\/projects\/([^/]+)\/(config|source|deploy|stop|deployment)$/);
+    const deploymentAction = pathname.match(/^\/api\/admin\/projects\/([^/]+)\/(config|deploy|stop|deployment)$/);
     if (deploymentAction) {
       const project = store.projects.find((item) => item.id === decodeURIComponent(deploymentAction[1]));
       if (!project) return json(res, 404, { error: 'Project not found.' });
@@ -808,19 +847,9 @@ async function handle(req, res) {
         await persist();
         return json(res, 200, { demoSubdomain, containerPort, serviceName });
       }
-      if (action === 'source' && method === 'POST') {
-        const bytes = await readBody(req, MAX_ARCHIVE_BYTES);
-        if (bytes.length < 4 || bytes.subarray(0, 4).readUInt32LE(0) !== 0x04034b50) return json(res, 400, { error: 'Upload a ZIP source archive.' });
-        const folder = path.join(DEPLOYMENTS_DIR, project.id);
-        await fsp.mkdir(folder, { recursive: true });
-        const archiveFile = path.join(folder, 'source.zip');
-        await fsp.writeFile(archiveFile, bytes);
-        project.deployment = { ...(project.deployment || {}), archiveFile: path.relative(ROOT, archiveFile), uploadedAt: new Date().toISOString(), status: project.deployment?.runtimeName ? 'running' : 'source-ready', error: '' };
-        await persist();
-        return json(res, 201, { uploaded: true, bytes: bytes.length, status: project.deployment.status });
-      }
       if (action === 'stop' && method === 'POST') {
         await removeRuntime(project);
+        project.demoEnabled = false;
         project.deployment = { ...(project.deployment || {}), status: 'stopped', localPort: 0, stoppedAt: new Date().toISOString() };
         await persist();
         return json(res, 200, { status: 'stopped' });
@@ -833,11 +862,13 @@ async function handle(req, res) {
         return json(res, 204, {});
       }
       if (action === 'deploy' && method === 'POST') {
+        if (!project.repoUrl) return json(res, 400, { error: 'Add a public GitHub repository URL before enabling this demo.' });
         if (!project.demoSubdomain) return json(res, 400, { error: 'Set your subdomain before deploying the source.' });
         if (store.projects.some((item) => item.id !== project.id && item.demoSubdomain === project.demoSubdomain)) return json(res, 409, { error: 'This subdomain is already used by another project.' });
         const parsedDemoUrl = project.demoUrl ? new URL(project.demoUrl) : null;
         if (parsedDemoUrl && parsedDemoUrl.pathname !== '/' && parsedDemoUrl.pathname !== '') return json(res, 400, { error: 'A deployed project URL must use the root of its domain.' });
         project.deployment = { ...(project.deployment || {}), status: 'building', error: '' };
+        project.demoEnabled = true;
         await persist();
         try {
           const runtime = await deployProject(project, project.containerPort || 3000);
