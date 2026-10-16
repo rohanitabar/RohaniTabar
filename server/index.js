@@ -420,8 +420,13 @@ async function validateCareer(body) {
         const descriptionFa = clean(typeof role.description === 'object' ? role.description.fa : role.description, 1200);
         if (!titleFa) throw Object.assign(new Error('Enter a position title.'), { status: 400 });
         const previousRole = previousCompany?.roles?.find((item) => item.id === role.id);
-        const titleEn = previousRole?.title?.fa === titleFa ? previousRole.title.en : '';
-        const descriptionEn = previousRole?.description?.fa === descriptionFa ? previousRole.description.en : '';
+        const reusableEnglish = (localized, source) => {
+          if (localized?.fa !== source || typeof localized.en !== 'string') return '';
+          const previousEnglish = localized.en.trim();
+          return previousEnglish && !/[\u0600-\u06FF]/.test(previousEnglish) ? previousEnglish : '';
+        };
+        const titleEn = reusableEnglish(previousRole?.title, titleFa);
+        const descriptionEn = reusableEnglish(previousRole?.description, descriptionFa);
         const rawTechnologies = Array.isArray(role.technologiesUsed) ? role.technologiesUsed : previousRole?.technologiesUsed || [];
         if (rawTechnologies.length > 30) throw Object.assign(new Error('Select up to 30 technologies for a position.'), { status: 400 });
         const technologiesUsed = [...new Set(rawTechnologies.map((technology) => clean(typeof technology === 'string' ? technology : technology?.id, 80)).filter(Boolean))].map((technologyId) => {
@@ -445,7 +450,7 @@ async function validateCareer(body) {
       fieldsToTranslate.forEach((field, index) => { field.role[field.field].en = translations[index]; });
     } catch (error) {
       await recordNotice('translation', error.message, 'validateCareer: translate position title and description', '/admin/career');
-      fieldsToTranslate.forEach((field) => { field.role[field.field].en = field.value; });
+      fieldsToTranslate.forEach((field) => { field.role[field.field].en = ''; });
     }
   }
   return result;
