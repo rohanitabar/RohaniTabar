@@ -104,6 +104,8 @@ const translatedError = (error, lang) => {
     'Enter a skill name and logo URL.': 'نام مهارت و تصویر لوگو را وارد یا بارگذاری کن.',
     'A profile URL and a logo are required.': 'لینک پروفایل و تصویر لوگو را وارد یا بارگذاری کن.',
     'Enter a valid HTTP or HTTPS URL.': 'یک لینک معتبر با شروع http یا https وارد کن.',
+    'This source repository is already assigned to another project.': 'این مخزن کد قبلاً به پروژهٔ دیگری اختصاص داده شده است.',
+    'This demo URL is already assigned to another project.': 'این لینک دمو قبلاً برای پروژهٔ دیگری ثبت شده است.',
     'Links must use HTTP or HTTPS.': 'لینک باید با http:// یا https:// شروع شود.',
     'Incorrect setup key.': 'کلید راه‌اندازی درست نیست.',
     'The uploaded file is not a valid PDF.': 'فایل انتخاب‌شده PDF معتبر نیست.',

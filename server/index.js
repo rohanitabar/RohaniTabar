@@ -263,6 +263,32 @@ async function readJson(req, maxBytes = 100000) {
 }
 const clean = (value, max) => typeof value === 'string' ? value.trim().slice(0, max) : '';
 const safeUrl = (value) => { const input = clean(value, 1000); if (!input) return ''; let parsed; try { const normalized = /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`; parsed = new URL(normalized); } catch (_) { throw Object.assign(new Error('Enter a valid HTTP or HTTPS URL.'), { status: 400 }); } if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) throw Object.assign(new Error('Enter a valid HTTP or HTTPS URL.'), { status: 400 }); return parsed.toString(); };
+function projectLinkKey(value, kind) {
+  if (!value) return '';
+  const url = new URL(value);
+  url.hash = '';
+  url.hostname = url.hostname.toLowerCase().replace(/^www\./, '');
+  if (kind === 'repository' && ['github.com', 'www.github.com'].includes(url.hostname)) {
+    const [, owner, repository] = url.pathname.split('/');
+    if (owner && repository) return `github:${owner.toLowerCase()}/${repository.replace(/\.git$/i, '').toLowerCase()}`;
+  }
+  url.pathname = url.pathname.replace(/\/{2,}/g, '/').replace(/\/$/, '');
+  url.searchParams.sort();
+  return url.toString().replace(/\/$/, '');
+}
+function projectLinkConflict(project, excludeId = '') {
+  const checks = [
+    ['repoUrl', 'repository', 'This source repository is already assigned to another project.'],
+    ['demoUrl', 'demo', 'This demo URL is already assigned to another project.']
+  ];
+  for (const [field, kind, message] of checks) {
+    const key = projectLinkKey(project[field], kind);
+    if (key && store.projects.some((item) => item.id !== excludeId && projectLinkKey(item[field], kind) === key)) {
+      return message;
+    }
+  }
+  return '';
+}
 async function projectInput(body, previous = null) {
   const titleFa = clean(body.titleFa, 160);
   const descriptionFa = clean(body.descriptionFa, 800);
@@ -957,6 +983,8 @@ async function handle(req, res) {
     if (socialMatch && method === 'DELETE') { store.socials = (store.socials || defaultSocials).filter((account) => account.id !== decodeURIComponent(socialMatch[1])); await persist(); return json(res, 204, {}); }
     if (pathname === '/api/admin/projects' && method === 'POST') {
       const project = { id: id(), ...await projectInput(await readJson(req)), createdAt: new Date().toISOString() };
+      const linkConflict = projectLinkConflict(project);
+      if (linkConflict) return json(res, 409, { error: linkConflict });
       if (project.demoSubdomain && store.projects.some((item) => item.demoSubdomain === project.demoSubdomain)) return json(res, 409, { error: 'This subdomain is already used by another project.' });
       store.projects.unshift(project); await persist(); return json(res, 201, project);
     }
@@ -971,6 +999,8 @@ async function handle(req, res) {
       if (index === -1) return json(res, 404, { error: 'Project not found.' });
       if (method === 'DELETE') { const [removed] = store.projects.splice(index, 1); await removeRuntime(removed); await fsp.rm(path.join(DEPLOYMENTS_DIR, removed.id), { recursive: true, force: true }); await persist(); return json(res, 204, {}); }
       const updated = { ...store.projects[index], ...await projectInput(await readJson(req), store.projects[index]) };
+      const linkConflict = projectLinkConflict(updated, updated.id);
+      if (linkConflict) return json(res, 409, { error: linkConflict });
       if (updated.demoSubdomain && store.projects.some((item) => item.id !== updated.id && item.demoSubdomain === updated.demoSubdomain)) return json(res, 409, { error: 'This subdomain is already used by another project.' });
       store.projects[index] = updated;
       await persist(); return json(res, 200, store.projects[index]);
