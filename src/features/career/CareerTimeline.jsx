@@ -24,7 +24,7 @@ export function CareerTimeline({ career: rawCareer, skills = [], lang = 'fa' }) 
       const showMore = company.roles.length > 1;
       return <article className={`career-company-card${expanded ? ' is-expanded' : ''}`} key={key}>
         <div className="career-company-heading">
-          {company.logoUrl ? <AdaptiveLogo className="career-logo" src={company.logoUrl} alt={company.name} /> : <span className="career-logo career-logo-fallback" aria-hidden="true">{company.name.slice(0, 1)}</span>}
+          {company.logoUrl ? <AdaptiveLogo className="career-logo" src={company.logoUrl} alt={company.name} loading="lazy" /> : <span className="career-logo career-logo-fallback" aria-hidden="true">{company.name.slice(0, 1)}</span>}
           <div><h3>{company.name}</h3><p>{careerPeriod(company, lang)}</p></div>
         </div>
         {!!visibleRoles.length && <ol className="career-roles">

@@ -1,7 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import PropTypes from 'prop-types';
 
 const logoToneCache = new Map();
+const themeListeners = new Set();
+let themeObserver;
+
+function isDarkTheme() { return document.documentElement.dataset.theme === 'dark'; }
+function subscribeTheme(listener) {
+  themeListeners.add(listener);
+  if (!themeObserver && typeof MutationObserver !== 'undefined') {
+    themeObserver = new MutationObserver(() => themeListeners.forEach((notify) => notify()));
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  }
+  return () => {
+    themeListeners.delete(listener);
+    if (!themeListeners.size && themeObserver) { themeObserver.disconnect(); themeObserver = undefined; }
+  };
+}
 
 function isMostlyBlack(image) {
   const canvas = document.createElement('canvas');
@@ -30,32 +45,47 @@ function isMostlyBlack(image) {
 
 export default function AdaptiveLogo({ src, alt = '', className = '', loading }) {
   const [needsLightBacking, setNeedsLightBacking] = useState(() => logoToneCache.get(src) || false);
+  const [nearby, setNearby] = useState(() => loading !== 'lazy' || typeof IntersectionObserver === 'undefined');
+  const wrapper = useRef(null);
+  const darkTheme = useSyncExternalStore(subscribeTheme, isDarkTheme, () => false);
+
+  useEffect(() => {
+    if (nearby || !wrapper.current) return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) { setNearby(true); observer.disconnect(); }
+    }, { rootMargin: '1200px' });
+    observer.observe(wrapper.current);
+    return () => observer.disconnect();
+  }, [nearby]);
 
   useEffect(() => {
     let active = true;
-    if (!src) return undefined;
+    if (!src || !darkTheme || !nearby) return undefined;
     if (logoToneCache.has(src)) {
       setNeedsLightBacking(logoToneCache.get(src));
       return undefined;
     }
-    const probe = new Image();
-    probe.crossOrigin = 'anonymous';
-    probe.onload = () => {
-      let isBlack = false;
-      try { isBlack = isMostlyBlack(probe); } catch (_) { isBlack = true; }
-      logoToneCache.set(src, isBlack);
-      if (active) setNeedsLightBacking(isBlack);
+    const inspect = () => {
+      const probe = new Image();
+      probe.crossOrigin = 'anonymous';
+      probe.onload = () => {
+        let isBlack = false;
+        try { isBlack = isMostlyBlack(probe); } catch (_) { isBlack = true; }
+        logoToneCache.set(src, isBlack);
+        if (active) setNeedsLightBacking(isBlack);
+      };
+      probe.onerror = () => {
+        logoToneCache.set(src, true);
+        if (active) setNeedsLightBacking(true);
+      };
+      probe.src = src;
     };
-    probe.onerror = () => {
-      logoToneCache.set(src, true);
-      if (active) setNeedsLightBacking(true);
-    };
-    probe.src = src;
+    inspect();
     return () => { active = false; };
-  }, [src]);
+  }, [src, darkTheme, nearby]);
 
-  return <span className={`adaptive-logo${needsLightBacking ? ' has-light-backing' : ''}`}>
-    <img className={className} src={src} alt={alt} loading={loading} />
+  return <span ref={wrapper} className={`adaptive-logo${needsLightBacking ? ' has-light-backing' : ''}`}>
+    {nearby && <img className={className} src={src} alt={alt} loading={loading} />}
   </span>;
 }
 

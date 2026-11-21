@@ -263,13 +263,15 @@ function proxyRequest(req, res, localPort) {
   req.pipe(upstream);
 }
 
-function deploymentForHost(host, projects, baseDomain = 'localhost') {
+function deploymentForHost(host, projects, baseDomain = 'localhost', localAddress = '') {
   const hostname = String(host || '').split(':')[0].toLowerCase();
+  const lanAddress = String(localAddress).replace(/^::ffff:/, '');
   for (const project of projects || []) {
     const deployment = project.deployment;
     if (!deployment || deployment.status !== 'running' || (deployment.runtimeKind !== 'static' && !deployment.localPort) || (deployment.runtimeKind === 'static' && !deployment.sourceDir)) continue;
     if (hostname === deployment.customDomain?.toLowerCase()) return deployment;
     if (hostname === `${project.demoSubdomain || deployment.subdomain}.${baseDomain}`.toLowerCase()) return deployment;
+    if (lanAddress && hostname === `${project.demoSubdomain || deployment.subdomain}.${lanAddress}.nip.io`.toLowerCase()) return deployment;
   }
   return null;
 }

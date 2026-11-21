@@ -80,6 +80,8 @@ Feature code lives together with its styles and focused tests. Shared UI pieces 
 
 `npm start` starts the API on port 5000 and the React site on port 3000. The API must be running for admin changes to save. To run them separately, use `npm run start:api` and `npm run start:ui` in two terminals. The React development server forwards `/api` requests to port 5000.
 
+To open local demos from a phone, connect it to the same network and open the site at `http://<computer-LAN-IP>:3000`. Active demos open on the isolated local preview server at port 5002. Allow ports 3000 and 5002 through the computer's firewall. For VS Code Dev Tunnels, forward both 3000 (website) and 5002 (demos) using the HTTP protocol. Open the forwarded website address on your phone. Running demos use the forwarded 5002 address automatically. For a public deployment, configure a real wildcard demo domain through `DEMO_BASE_DOMAIN`; `localhost` links are only for local development.
+
 If an older site or API is already running, stop its terminal with Ctrl+C before running `npm start` again. Restarting the API signs out existing admin sessions; sign in again with your existing username and password.
 
 The React Developer Tools warning about a development build is expected with `npm start`. To preview the production build locally, run `npm run build` followed by `npm run preview`, then open `http://localhost:5000`.
@@ -91,6 +93,14 @@ Manage demos from the project's add/edit form. Enter a **public GitHub repositor
 GitHub archives are limited to 150 MB and extracted source to 250 MB. Static projects can be served from a root `index.html` or a prebuilt `dist`, `build` or `out` directory. Backend and packaged projects still need a `Dockerfile` or Compose file; Compose service names are auto-detected when there is a single service. Container demos require Docker Desktop or Docker Engine. `.git` folders are omitted during extraction. Do not store secrets in public repositories. Dockerfile-launched containers are capped at 512 MB RAM, 0.5 CPU and 128 processes. Compose projects need their own resource limits. This local feature is an early deployment workflow: persistent demo data, automatic TLS, and deployment through the Hamravesh API are not configured yet. For production, use durable storage or a database for demo data and review the platform's container isolation and resource limits.
 
 ## Production
+
+The production build keeps its JavaScript in external files so the server can apply a restrictive Content Security Policy. Fingerprinted build assets and uploaded images use long-lived browser caching; HTML is revalidated. The API streams files instead of buffering complete files in memory and gzips large site-data responses. Production HTML includes compressed public bootstrap data so visitors can render the page without an extra initial API request; a skeleton remains available when that data is unavailable. The admin interface loads only on the admin route.
+
+Set `PUBLIC_ORIGIN` to the exact HTTPS origin in production. The API checks browser request origins against it, rate-limits public post writes, and sends security headers including HSTS when HTTPS is configured. Install only production dependencies on the runtime host after building (`npm ci --omit=dev`) if build and runtime are separate deployment stages. The project's existing JSON storage and in-memory sessions are designed for one API process; Kubernetes or multiple API replicas require shared persistence and sessions first. Zustand would add a dependency without improving the current small shared UI state.
+
+### Technical SEO
+
+The production Node server adds route-specific titles, descriptions, canonical URLs, Open Graph and Twitter metadata to the HTML response. Published articles also include `BlogPosting` structured data and poster metadata. `/sitemap.xml` lists public pages and published articles; `/robots.txt` points to it and allows public browsing for ordinary crawlers, `OAI-SearchBot` and `ChatGPT-User` while excluding admin and API paths. Drafts and unknown article URLs return 404 and `noindex`; the admin page is also `noindex`. Set `PUBLIC_ORIGIN=https://your-domain.example` before deployment so canonical and sitemap URLs use the real domain. The React app remains client rendered, so a search engine must run JavaScript to index the full article text; metadata and structured data are available in the initial HTML.
 
 Build the React app and start the Node server:
 

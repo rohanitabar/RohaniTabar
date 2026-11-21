@@ -5,23 +5,43 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const zlib = require('node:zlib');
 const webPush = require('web-push');
 const { DEPLOYMENTS_DIR, validateSubdomain, deployProject, removeRuntime, proxyRequest, deploymentForHost } = require('./deployments');
+const { publicOrigin, renderHtml, sitemapXml, robotsText } = require('./seo');
 
 const ROOT = path.resolve(__dirname, '..');
-const DATA_DIR = path.join(__dirname, 'data');
+const HOME_ASSETS = (() => {
+  try {
+    const files = JSON.parse(fs.readFileSync(path.join(ROOT, 'build', 'asset-manifest.json'), 'utf8')).files || {};
+    const cssPath = files['main.css'];
+    if (!/^\/static\/css\/main\.[a-f0-9]+\.css$/.test(cssPath || '')) return {};
+    return {
+      images: { mobile: files['static/media/Abbas-mobile.webp'], desktop: files['static/media/Abbas-desktop.webp'] },
+      logo: files['static/media/Logo.jpg'],
+      cssPath,
+      css: fs.readFileSync(path.join(ROOT, 'build', cssPath), 'utf8')
+    };
+  } catch (_) { return {}; }
+})();
+const DATA_DIR = path.resolve(process.env.PORTFOLIO_DATA_DIR || path.join(__dirname, 'data'));
 const DATA_FILE = path.join(DATA_DIR, 'site.json');
 const PUSH_SUBSCRIPTIONS_FILE = path.join(DATA_DIR, 'push-subscriptions.json');
 const PUSH_KEYS_FILE = path.join(DATA_DIR, 'push-keys.json');
-const UPLOAD_DIR = path.join(ROOT, 'public', 'uploads');
+const UPLOAD_DIR = path.resolve(process.env.PORTFOLIO_UPLOAD_DIR || path.join(ROOT, 'public', 'uploads'));
 const PORT = Number(process.env.PORT || 5000);
+// Port 5001 is reserved for the local LibreTranslate service.
+const defaultDemoPort = PORT + 1 === 5001 ? 5002 : PORT + 1;
+const LOCAL_DEMO_PORT = Number(process.env.LOCAL_DEMO_PORT || defaultDemoPort);
 const API_VERSION = 24;
+const STATIC_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https:; img-src 'self' https: data: blob:; font-src 'self' https: data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'";
 const SESSION_COOKIE = 'portfolio_session';
 const SESSION_TTL = 7 * 24 * 60 * 60 * 1000;
 const sessions = new Map();
 const attempts = new Map();
 const contactAttempts = new Map();
 const clientErrorAttempts = new Map();
+const publicWriteAttempts = new Map();
 const dataEventClients = new Set();
 let store = null;
 let saveChain = Promise.resolve();
@@ -200,6 +220,18 @@ function json(res, status, value, headers = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers });
   res.end(body);
 }
+function publicSiteData(req, res) {
+  const body = Buffer.from(JSON.stringify(visibleData(Boolean(sessionFor(req)))));
+  if (body.length < 1024 || !/\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Vary': 'Accept-Encoding', 'X-Content-Type-Options': 'nosniff' });
+    return res.end(body);
+  }
+  zlib.gzip(body, (error, compressed) => {
+    if (res.destroyed) return;
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', ...(error ? {} : { 'Content-Encoding': 'gzip' }), 'Cache-Control': 'no-store', 'Vary': 'Accept-Encoding', 'X-Content-Type-Options': 'nosniff' });
+    res.end(error ? body : compressed);
+  });
+}
 function parseCookies(req) {
   return Object.fromEntries((req.headers.cookie || '').split(';').map((part) => part.trim().split(/=(.*)/s).slice(0, 2)).filter((part) => part.length === 2).map(([key, value]) => { try { return [key, decodeURIComponent(value)]; } catch (_) { return [key, '']; } }));
 }
@@ -214,15 +246,30 @@ function requestOriginAllowed(req) {
   if (!origin) return true;
   try {
     const source = new URL(origin);
-    const expected = process.env.PUBLIC_ORIGIN;
-    if (expected && source.origin === expected.replace(/\/$/, '')) return true;
-    return source.hostname === (req.headers.host || '').split(':')[0] || ['localhost', '127.0.0.1'].includes(source.hostname);
+    const expected = process.env.PUBLIC_ORIGIN?.replace(/\/$/, '');
+    if (expected) return source.origin === expected;
+    if (source.host === req.headers.host) return true;
+    return process.env.NODE_ENV !== 'production' && ['localhost:3000', '127.0.0.1:3000'].includes(source.host)
+      && ['localhost:5000', '127.0.0.1:5000'].includes(req.headers.host);
   } catch (_) { return false; }
 }
 function requireOrigin(req, res) {
   if (requestOriginAllowed(req)) return true;
   json(res, 403, { error: 'This request origin is not allowed.' });
   return false;
+}
+function allowPublicWrite(req, kind, limit) {
+  const now = Date.now();
+  const key = `${kind}:${req.socket.remoteAddress || 'unknown'}`;
+  const previous = publicWriteAttempts.get(key);
+  const attempt = previous && previous.resetAt > now ? previous : { count: 0, resetAt: now + 60 * 60 * 1000 };
+  attempt.count += 1;
+  publicWriteAttempts.set(key, attempt);
+  if (publicWriteAttempts.size > 2000) {
+    for (const [entry, value] of publicWriteAttempts) if (value.resetAt <= now) publicWriteAttempts.delete(entry);
+    while (publicWriteAttempts.size > 2000) publicWriteAttempts.delete(publicWriteAttempts.keys().next().value);
+  }
+  return attempt.count <= limit;
 }
 function sessionFor(req) {
   const token = parseCookies(req)[SESSION_COOKIE];
@@ -262,7 +309,7 @@ async function readJson(req, maxBytes = 100000) {
   catch (_) { throw Object.assign(new Error('Invalid JSON body.'), { status: 400 }); }
 }
 const clean = (value, max) => typeof value === 'string' ? value.trim().slice(0, max) : '';
-const safeUrl = (value) => { const input = clean(value, 1000); if (!input) return ''; let parsed; try { const normalized = /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`; parsed = new URL(normalized); } catch (_) { throw Object.assign(new Error('Enter a valid HTTP or HTTPS URL.'), { status: 400 }); } if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) throw Object.assign(new Error('Enter a valid HTTP or HTTPS URL.'), { status: 400 }); return parsed.toString(); };
+const safeUrl = (value) => { const input = clean(value, 1000); if (!input) return ''; let parsed; try { const normalized = /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`; parsed = new URL(normalized); } catch (_) { throw Object.assign(new Error('Enter a valid HTTP or HTTPS URL.'), { status: 400 }); } if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password) throw Object.assign(new Error('Enter a valid HTTP or HTTPS URL without embedded credentials.'), { status: 400 }); return parsed.toString(); };
 function projectLinkKey(value, kind) {
   if (!value) return '';
   const url = new URL(value);
@@ -335,7 +382,7 @@ async function projectInput(body, previous = null) {
   }
   return { title: { fa: titleFa, en: translations.title }, description: { fa: descriptionFa, en: translations.description }, featured, translationStatus: pendingFields.length ? 'pending' : 'translated', translationPendingFields: pendingFields, image, demoUrl, repoUrl, skillsUsed, demoSubdomain, demoBranch, projectType, demoEnabled, containerPort, serviceName };
 }
-const safeImageUrl = (value) => { const input = clean(value, 1000); if (/^\/uploads\/(?:skill-logo|social-logo|post-image|project-image|ad-image)-[A-Za-z0-9-]+\.(?:png|jpe?g|webp)$/.test(input) || /^\/icons\/(?:json|skill-default)\.svg$/.test(input)) return input; return safeUrl(input); };
+const safeImageUrl = (value) => { const input = clean(value, 1000); if (/^\/uploads\/(?:skill-logo|social-logo|post-image|project-image|ad-image)-[A-Za-z0-9-]+\.(?:png|jpe?g|webp)$/.test(input) || /^\/icons\/(?:json|skill-default)\.svg$/.test(input)) return input; const url = safeUrl(input); if (url.startsWith('http://') && publicOrigin(process.env.PUBLIC_ORIGIN).startsWith('https://')) throw Object.assign(new Error('Use an HTTPS image link on this site, or upload the image file.'), { status: 400 }); return url; };
 async function adInput(body, previous = null) {
   const imageUrl = safeImageUrl(body.imageUrl);
   const href = safeUrl(body.href);
@@ -361,13 +408,20 @@ async function passwordMatches(password, admin) {
   const candidate = await hashPassword(password, admin.salt);
   return crypto.timingSafeEqual(Buffer.from(candidate.hash, 'hex'), Buffer.from(admin.hash, 'hex'));
 }
+function optimizedProjectImage(url) {
+  if (!/^\/uploads\/project-image-\d+-[a-f0-9]+\.(?:png|jpg|jpeg)$/.test(url || '')) return url;
+  const optimized = url.replace(/\.[^.]+$/, '.optimized.webp');
+  return fs.existsSync(path.join(UPLOAD_DIR, path.basename(optimized))) ? optimized : url;
+}
 function visibleData(includeDrafts = false) {
   const projects = store.projects.map((project) => {
     const deployment = project.deployment;
     const localDemoUrl = deployment?.localUrl || '';
-    const publicDemoUrl = deployment?.status === 'running' ? (process.env.NODE_ENV === 'production' ? project.demoUrl || deployment.url || '' : localDemoUrl) : project.demoUrl;
-    const publicDeployment = deployment ? { status: deployment.status || 'source-ready', subdomain: project.demoSubdomain || '', url: publicDemoUrl || '', uploadedAt: deployment.uploadedAt || '', deployedAt: deployment.deployedAt || '', error: includeDrafts ? deployment.error || '' : '' } : null;
-    return { ...project, projectType: project.projectType || (deployment?.runtimeKind === 'static' ? 'static' : 'dynamic'), targetDemoUrl: project.demoUrl || '', deployment: publicDeployment };
+    const publicDomain = process.env.DEMO_BASE_DOMAIN;
+    const productionDemoUrl = project.demoUrl || (publicDomain && publicDomain !== 'localhost' && project.demoSubdomain ? `https://${project.demoSubdomain}.${publicDomain}` : '');
+    const publicDemoUrl = deployment?.status === 'running' ? (process.env.NODE_ENV === 'production' ? productionDemoUrl : localDemoUrl) : project.demoUrl;
+    const publicDeployment = deployment ? { status: deployment.status || 'source-ready', subdomain: project.demoSubdomain || '', url: publicDemoUrl || '', localPreviewPath: deployment.status === 'running' ? `/demo/${encodeURIComponent(project.demoSubdomain || deployment.subdomain)}/` : '', localPreviewPort: LOCAL_DEMO_PORT, uploadedAt: deployment.uploadedAt || '', deployedAt: deployment.deployedAt || '', error: includeDrafts ? deployment.error || '' : '' } : null;
+    return { ...project, displayImage: optimizedProjectImage(project.image), projectType: project.projectType || (deployment?.runtimeKind === 'static' ? 'static' : 'dynamic'), targetDemoUrl: project.demoUrl || '', deployment: publicDeployment };
   });
   const career = store.career || { noExperience: false, companies: [] };
   const publicCareer = !includeDrafts && career.noExperience ? { ...career, companies: [] } : career;
@@ -614,30 +668,65 @@ async function validatePost(body, previous = null) {
   return { id: previous?.id || id(), slug: uniquePostSlug(translations.title, titleFa, previous?.id), title: { fa: titleFa, en: translations.title }, excerpt: { fa: excerptFa, en: translations.excerpt }, body: { fa: bodyFa, en: translations.body }, translationStatus: pendingFields.length ? 'pending' : 'translated', translationPendingFields: pendingFields, tags: { fa: tags, en: tags }, image, likes: [], comments: [], published: body.published === true || body.published === 'on', createdAt: new Date().toISOString() };
 }
 function serveStatic(req, res, pathname) {
+  if (!['GET', 'HEAD'].includes(req.method)) return json(res, 405, { error: 'Method not allowed.' });
+  const origin = publicOrigin(process.env.PUBLIC_ORIGIN);
+  if (pathname === '/robots.txt' || pathname === '/sitemap.xml') {
+    if (pathname === '/sitemap.xml' && !origin) return json(res, 503, { error: 'Set PUBLIC_ORIGIN to publish a sitemap.' });
+    const body = pathname === '/robots.txt' ? robotsText(origin) : sitemapXml(origin, store.posts);
+    res.writeHead(200, { 'Content-Type': pathname === '/robots.txt' ? 'text/plain; charset=utf-8' : 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=300', 'Content-Length': Buffer.byteLength(body), 'X-Content-Type-Options': 'nosniff' });
+    return res.end(req.method === 'HEAD' ? undefined : body);
+  }
   let decoded;
   try { decoded = decodeURIComponent(pathname); } catch (_) { return json(res, 400, { error: 'Invalid path.' }); }
+  if (decoded === '/index.html') { res.writeHead(308, { Location: '/', 'Cache-Control': 'no-store' }); return res.end(); }
   if (decoded.startsWith('/uploads/')) {
     const filename = path.basename(decoded);
     if (!/^(?:resume-[a-zA-Z0-9-]+\.pdf|(?:skill-logo|social-logo|post-image|project-image|ad-image)-[a-zA-Z0-9-]+\.(?:png|jpe?g|webp))$/.test(filename)) return json(res, 404, { error: 'Not found.' });
-    return fs.readFile(path.join(UPLOAD_DIR, filename), (error, data) => {
-      if (error) return json(res, 404, { error: 'Not found.' });
+    return fs.stat(path.join(UPLOAD_DIR, filename), (error, stat) => {
+      if (error || !stat.isFile()) return json(res, 404, { error: 'Not found.' });
       const extension = path.extname(filename).toLowerCase();
       const contentType = extension === '.pdf' ? 'application/pdf' : extension === '.png' ? 'image/png' : extension === '.webp' ? 'image/webp' : 'image/jpeg';
-      res.writeHead(200, { 'Content-Type': contentType, ...(extension === '.pdf' ? { 'Content-Disposition': 'inline' } : { 'Cache-Control': 'public, max-age=31536000, immutable' }), 'X-Content-Type-Options': 'nosniff' });
-      res.end(data);
+      res.writeHead(200, { 'Content-Type': contentType, 'Content-Length': stat.size, ...(extension === '.pdf' ? { 'Content-Disposition': 'inline', 'Cache-Control': 'private, no-store' } : { 'Cache-Control': 'public, max-age=31536000, immutable' }), 'X-Content-Type-Options': 'nosniff' });
+      if (req.method === 'HEAD') return res.end();
+      fs.createReadStream(path.join(UPLOAD_DIR, filename)).on('error', () => res.destroy()).pipe(res);
     });
   }
   const buildRoot = path.resolve(ROOT, 'build');
   const file = path.resolve(buildRoot, decoded.replace(/^\/+/, ''));
   if (file !== buildRoot && !file.startsWith(buildRoot + path.sep)) return json(res, 404, { error: 'Not found.' });
   fs.stat(file, (error, stat) => {
+    if ((error || !stat.isFile()) && path.extname(decoded) && !decoded.startsWith('/blog/')) return json(res, 404, { error: 'Not found.' });
     const target = !error && stat.isFile() ? file : path.join(ROOT, 'build', 'index.html');
-    fs.readFile(target, (readError, data) => {
-      if (readError) return json(res, 404, { error: 'Build the website before using production mode.' });
+    fs.stat(target, (readError, fileStat) => {
+      if (readError || !fileStat.isFile()) return json(res, 404, { error: 'Build the website before using production mode.' });
       const extension = path.extname(target).toLowerCase();
-      const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.ico': 'image/x-icon', '.json': 'application/json' };
-      res.writeHead(200, { 'Content-Type': types[extension] || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff' });
-      res.end(data);
+      if (extension === '.html') {
+        return fs.readFile(target, 'utf8', (htmlError, template) => {
+          if (htmlError) return json(res, 500, { error: 'Could not read the website.' });
+          const page = renderHtml(template, decoded, store.posts, origin, decoded === '/admin' ? null : visibleData(false), HOME_ASSETS, req.headers.cookie);
+          const body = Buffer.from(page.html);
+          const headers = { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': page.noindex ? 'no-store' : 'no-cache', 'Vary': 'Accept-Encoding', 'Content-Security-Policy': page.structuredDataHash ? STATIC_CSP.replace("script-src 'self'", `script-src 'self' ${page.structuredDataHash}`) : STATIC_CSP, 'X-Content-Type-Options': 'nosniff', ...(page.noindex ? { 'X-Robots-Tag': 'noindex, nofollow' } : {}) };
+          const send = (payload, compressed) => {
+            if (res.destroyed) return;
+            res.writeHead(page.status, { ...headers, 'Content-Length': payload.length, ...(compressed ? { 'Content-Encoding': 'gzip' } : {}) });
+            res.end(req.method === 'HEAD' ? undefined : payload);
+          };
+          if (body.length > 1024 && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) return zlib.gzip(body, (gzipError, compressed) => send(gzipError ? body : compressed, !gzipError));
+          return send(body, false);
+        });
+      }
+      const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.ico': 'image/x-icon', '.json': 'application/json', '.woff': 'font/woff', '.woff2': 'font/woff2' };
+      const cache = extension === '.html' || target === path.join(buildRoot, 'service-worker.js') ? 'no-cache' : /[.-][a-f0-9]{8,}\./i.test(path.basename(target)) ? 'public, max-age=31536000, immutable' : 'public, max-age=3600';
+      const compressible = /\.(?:js|css|svg|json)$/.test(target) && fileStat.size > 1024;
+      const sendAsset = (asset, size, compressed) => {
+        res.writeHead(200, { 'Content-Type': types[extension] || 'application/octet-stream', 'Content-Length': size, 'Cache-Control': cache, ...(compressible ? { Vary: 'Accept-Encoding' } : {}), ...(compressed ? { 'Content-Encoding': 'gzip' } : {}), 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'X-Frame-Options': 'DENY', 'Content-Security-Policy': STATIC_CSP });
+        if (req.method === 'HEAD') return res.end();
+        fs.createReadStream(asset).on('error', () => res.destroy()).pipe(res);
+      };
+      if (compressible && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
+        return fs.stat(`${target}.gz`, (compressionError, compressedStat) => sendAsset(compressionError || !compressedStat.isFile() ? target : `${target}.gz`, compressionError || !compressedStat.isFile() ? fileStat.size : compressedStat.size, !compressionError && compressedStat.isFile()));
+      }
+      return sendAsset(target, fileStat.size, false);
     });
   });
 }
@@ -659,9 +748,41 @@ async function serveDemoStatic(req, res, deployment, pathname) {
     stat = await fsp.stat(target).catch(() => null);
   }
   if (!stat?.isFile()) return json(res, 404, { error: 'Not found.' });
+  if (path.basename(target).toLowerCase() === 'index.html') {
+    const prefix = req.demoMountPrefix || '';
+    if (prefix) {
+      const html = await fsp.readFile(target, 'utf8');
+      const base = `<base href="${prefix}">`;
+      const rewritten = html.replace(/(\b(?:src|href)=['"])\/(?!\/)/gi, `$1${prefix}`).replace(/<head([^>]*)>/i, `<head$1>${base}`);
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
+      if (req.method === 'HEAD') return res.end();
+      return res.end(rewritten);
+    }
+  }
   if (stat.size === 0) { res.writeHead(200, { 'Content-Length': 0, 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' }); return res.end(); }
   const mimeTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.ico': 'image/x-icon', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.mp4': 'video/mp4', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.eot': 'application/vnd.ms-fontobject', '.pdf': 'application/pdf' };
-  const headers = { 'Content-Type': mimeTypes[path.extname(target).toLowerCase()] || 'application/octet-stream', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' };
+  const extension = path.extname(target).toLowerCase();
+  const canCompress = stat.size >= 1024 && /^(?:\.css|\.js|\.mjs|\.json|\.svg)$/.test(extension);
+  const etag = `W/"${stat.size.toString(16)}-${Math.trunc(stat.mtimeMs).toString(16)}"`;
+  const headers = { 'Content-Type': mimeTypes[extension] || 'application/octet-stream', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff', ETag: etag };
+  if (canCompress) headers.Vary = 'Accept-Encoding';
+  const requestedTags = (req.headers['if-none-match'] || '').split(',').map((value) => value.trim());
+  if (!req.headers.range && (requestedTags.includes(etag) || requestedTags.includes('*'))) {
+    res.writeHead(304, headers);
+    return res.end();
+  }
+  const acceptsGzip = (req.headers['accept-encoding'] || '').split(',').some((value) => /^gzip(?:\s*;\s*q\s*=\s*(?:1(?:\.0+)?|0\.\d*[1-9]\d*))?$/i.test(value.trim()));
+  if (canCompress && !req.headers.range && acceptsGzip) {
+    res.writeHead(200, { ...headers, 'Content-Encoding': 'gzip' });
+    if (req.method === 'HEAD') return res.end();
+    const stream = fs.createReadStream(target);
+    const compressor = zlib.createGzip();
+    stream.on('error', () => res.destroy());
+    compressor.on('error', () => res.destroy());
+    res.on('close', () => { stream.destroy(); compressor.destroy(); });
+    stream.pipe(compressor).pipe(res);
+    return;
+  }
   let start = 0;
   let end = stat.size - 1;
   let status = 200;
@@ -684,17 +805,38 @@ async function serveDemoStatic(req, res, deployment, pathname) {
   stream.pipe(res);
 }
 
+async function serveLocalDemo(req, res) {
+  if (!['GET', 'HEAD'].includes(req.method)) return json(res, 405, { error: 'Method not allowed.' });
+  const parsed = new URL(req.url, 'http://localhost');
+  const match = parsed.pathname.match(/^\/demo\/([a-z0-9-]+)(\/.*)?$/i);
+  if (!match) return json(res, 404, { error: 'Demo not found.' });
+  const project = store.projects.find((item) => item.demoSubdomain === match[1] && item.deployment?.status === 'running');
+  if (!project) return json(res, 404, { error: 'Demo not found.' });
+  const deployment = project.deployment;
+  if (deployment.runtimeKind === 'static') {
+    req.demoMountPrefix = `/demo/${encodeURIComponent(project.demoSubdomain)}/`;
+    return serveDemoStatic(req, res, deployment, match[2] || '/');
+  }
+  if (!deployment.localPort) return json(res, 503, { error: 'This demo is unavailable.' });
+  req.url = `${match[2] || '/'}${parsed.search}`;
+  return proxyRequest(req, res, deployment.localPort);
+}
+
 async function handle(req, res) {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = parsedUrl.pathname;
   const method = req.method;
-  const hostedDemo = deploymentForHost(req.headers.host, store?.projects, process.env.DEMO_BASE_DOMAIN || 'localhost');
+  const hostedDemo = deploymentForHost(req.headers.host, store?.projects, process.env.DEMO_BASE_DOMAIN || 'localhost', req.socket.localAddress);
   if (hostedDemo) return hostedDemo.runtimeKind === 'static' ? serveDemoStatic(req, res, hostedDemo, pathname) : proxyRequest(req, res, hostedDemo.localPort);
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (process.env.NODE_ENV === 'production' && process.env.PUBLIC_ORIGIN?.startsWith('https://')) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   if (pathname.startsWith('/api/') && !requireOrigin(req, res)) return;
   try {
     if (method === 'GET' && pathname === '/api/health') return json(res, 200, { ok: true, apiVersion: API_VERSION });
     if (method === 'GET' && pathname === '/api/events') return streamDataEvents(res);
-    if (method === 'GET' && pathname === '/api/site-data') return json(res, 200, visibleData(Boolean(sessionFor(req))));
+    if (method === 'GET' && pathname === '/api/site-data') return publicSiteData(req, res);
     if (pathname === '/api/client-errors' && method === 'POST') {
       const ip = req.socket.remoteAddress || 'unknown';
       const current = clientErrorAttempts.get(ip) || { count: 0, resetAt: Date.now() + 60 * 60 * 1000 };
@@ -782,6 +924,7 @@ async function handle(req, res) {
       if (postMatch && method === 'POST') {
         const post = store.posts.find((entry) => entry.id === decodeURIComponent(postMatch[1]) && entry.published);
         if (!post) return json(res, 404, { error: 'Post not found.' });
+        if (!allowPublicWrite(req, postMatch[2], postMatch[2] === 'like' ? 60 : 10)) return json(res, 429, { error: 'Too many requests. Please try again later.' });
         if (postMatch[2] === 'like') {
           const cookies = parseCookies(req);
           let visitor = cookies.portfolio_visitor;
@@ -1012,7 +1155,7 @@ async function handle(req, res) {
       if (index === -1) return json(res, 404, { error: 'Post not found.' });
       const previous = store.posts[index];
       const updated = await validatePost(await readJson(req), previous);
-      store.posts[index] = { ...updated, id: previous.id, createdAt: previous.createdAt, likes: previous.likes || [], comments: previous.comments || [] };
+      store.posts[index] = { ...updated, id: previous.id, createdAt: previous.createdAt, updatedAt: new Date().toISOString(), likes: previous.likes || [], comments: previous.comments || [] };
       await persist();
       return json(res, 200, store.posts[index]);
     }
@@ -1071,11 +1214,16 @@ async function handle(req, res) {
     if (error.status) return json(res, error.status, { error: error.message });
     await recordNotice(pathname.includes('/posts') ? 'posts' : pathname.includes('/projects') ? 'projects' : pathname.includes('/career') ? 'experience' : pathname.includes('/translate') ? 'translation' : 'api', error.message || 'Server request failed.', error.stack || '', pathname);
     console.error(error);
-    return json(res, 500, { error: error.message || 'The server could not complete the request.' });
+    return json(res, 500, { error: 'The server could not complete the request.' });
   }
 }
 
 init().then(() => {
   const server = http.createServer((req, res) => { handle(req, res); });
   server.listen(PORT, () => console.log(`Portfolio API listening on http://localhost:${PORT}`));
+  if (process.env.NODE_ENV !== 'production' || process.env.LOCAL_DEMOS_ENABLED === 'true') {
+    const demos = http.createServer((req, res) => { void serveLocalDemo(req, res).catch((error) => { if (!res.headersSent) json(res, 500, { error: 'Could not load this demo.' }); else res.destroy(); console.error('Local demo failed:', error.message); }); });
+    demos.listen(LOCAL_DEMO_PORT, () => console.log(`Local demos listening on http://localhost:${LOCAL_DEMO_PORT}`));
+    demos.on('error', (error) => console.error(`Local demo server could not start on port ${LOCAL_DEMO_PORT}:`, error.message));
+  }
 }).catch((error) => { console.error('Could not start the portfolio server:', error); process.exit(1); });

@@ -82,14 +82,42 @@ export function ArticleEditor({ name, label, defaultValue = '', lang, onUpload }
   </div>;
 }
 
-export function ProjectCard({ project, lang, t, index = 0 }) {
-  const demoUrl = project.deployment?.url || project.demoUrl;
-  return <article className={`project-card${project.deployment?.status === 'running' ? ' has-live-demo' : ''}`}><div className={`project-art art-${index % 3}${project.image ? ' project-art-image' : ''}`}>{project.image ? <img className="project-cover" src={project.image} alt={localized(project.title, lang)} loading="lazy" /> : <div className="art-window"><i /><i /><i /><b>{localized(project.title, lang)?.slice(0, 1)}</b></div>}{project.featured !== false && <span className="art-label">{lang === 'fa' ? '\u067E\u0631\u0648\u0698\u0647 \u0645\u0646\u062A\u062E\u0628' : 'Selected work'}</span>}</div><div className="project-info"><h3>{localized(project.title, lang)}</h3><p>{localized(project.description, lang)}</p>{project.skillsUsed?.length > 0 && <ul className="project-tech-list" aria-label={lang === 'fa' ? 'مهارت‌های استفاده‌شده' : 'Technologies used'}>{project.skillsUsed.map((skill) => <li key={skill.id || skill.name}>{skill.iconUrl && <img src={skill.iconUrl} alt="" loading="lazy" />}<span>{skill.name || skill}</span></li>)}</ul>}<div className="project-links">{demoUrl && <a href={demoUrl} target="_blank" rel="noreferrer">{t.viewDemo}</a>}{project.repoUrl && <a href={project.repoUrl} target="_blank" rel="noreferrer">{t.source}</a>}{!demoUrl && !project.repoUrl && <span>{lang === 'fa' ? 'به‌زودی' : 'Coming soon'}</span>}</div></div></article>;
+export function resolveProjectDemoUrl(project, hostname = window.location.hostname) {
+  if (project.deployment?.status !== 'running') return project.demoUrl || '';
+  const raw = project.deployment?.url || project.demoUrl || '';
+  const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1' || /^10\.(?:\d{1,3}\.){2}\d{1,3}$/.test(hostname) || /^192\.168\.(?:\d{1,3}\.)\d{1,3}$/.test(hostname) || /^172\.(?:1[6-9]|2\d|3[01])\.(?:\d{1,3}\.)\d{1,3}$/.test(hostname);
+  if (isLocalHost && project.deployment.localPreviewPath && project.deployment.localPreviewPort) {
+    return `${window.location.protocol}//${hostname}:${project.deployment.localPreviewPort}${project.deployment.localPreviewPath}`;
+  }
+  const tunnel = hostname.match(/^([a-z0-9-]+)-\d+(\.(?:[a-z0-9-]+\.)?devtunnels\.ms)$/i);
+  if (tunnel && project.deployment.localPreviewPath && project.deployment.localPreviewPort) {
+    if (project.demoUrl) return project.demoUrl;
+    const [, tunnelId, domain] = tunnel;
+    return `https://${tunnelId}-${project.deployment.localPreviewPort}${domain}${project.deployment.localPreviewPath}`;
+  }
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    if (!url.hostname.endsWith('.localhost')) return raw;
+    return isLocalHost ? raw : project.demoUrl || '';
+  } catch (_) { return project.demoUrl || ''; }
+}
+
+function ProjectCover({ src, alt, priority }) {
+  return <span className="project-cover-container">
+    <img className="project-cover" src={src} alt={alt} loading={priority ? 'eager' : 'lazy'} fetchPriority={priority ? 'high' : 'auto'} decoding="async" />
+  </span>;
+}
+
+export function ProjectCard({ project, lang, t, index = 0, priority = false }) {
+  const cover = project.displayImage || project.image;
+  const demoUrl = resolveProjectDemoUrl(project);
+  return <article className={`project-card${project.deployment?.status === 'running' ? ' has-live-demo' : ''}`}><div className={`project-art art-${index % 3}${cover ? ' project-art-image' : ''}`}>{cover ? <ProjectCover src={cover} alt={localized(project.title, lang)} priority={priority} /> : <div className="art-window"><i /><i /><i /><b>{localized(project.title, lang)?.slice(0, 1)}</b></div>}{project.featured !== false && <span className="art-label">{lang === 'fa' ? '\u067E\u0631\u0648\u0698\u0647 \u0645\u0646\u062A\u062E\u0628' : 'Selected work'}</span>}</div><div className="project-info"><h3>{localized(project.title, lang)}</h3><p>{localized(project.description, lang)}</p>{project.skillsUsed?.length > 0 && <ul className="project-tech-list" aria-label={lang === 'fa' ? 'مهارت‌های استفاده‌شده' : 'Technologies used'}>{project.skillsUsed.map((skill) => <li key={skill.id || skill.name}>{skill.iconUrl && <img src={skill.iconUrl} alt="" loading="lazy" />}<span>{skill.name || skill}</span></li>)}</ul>}<div className="project-links">{demoUrl && <a href={demoUrl} target="_blank" rel="noreferrer">{t.viewDemo}</a>}{project.repoUrl && <a href={project.repoUrl} target="_blank" rel="noreferrer">{t.source}</a>}{!demoUrl && !project.repoUrl && <span>{lang === 'fa' ? 'به‌زودی' : 'Coming soon'}</span>}</div></div></article>;
 }
 
 export function PostPreview({ post, lang, featured = false }) {
   return <article className={`magazine-card ${featured ? 'magazine-featured' : 'magazine-horizontal'}`}>
-    <Link className="magazine-image" to={postUrl(post)} target="_blank" rel="noopener noreferrer" aria-label={localized(post.title, lang)}>{post.image ? <img src={post.image} alt="" loading="lazy" /> : <span className="magazine-placeholder"><small>{lang === 'fa' ? 'مجله' : 'JOURNAL'}</small><strong>{localized(post.title, lang)}</strong></span>}</Link>
+    <Link className="magazine-image" to={postUrl(post)} target="_blank" rel="noopener noreferrer" aria-label={localized(post.title, lang)}>{post.image ? <img src={post.image} alt="" loading={featured ? 'eager' : 'lazy'} fetchPriority={featured ? 'high' : 'auto'} decoding="async" /> : <span className="magazine-placeholder"><small>{lang === 'fa' ? 'مجله' : 'JOURNAL'}</small><strong>{localized(post.title, lang)}</strong></span>}</Link>
     <div className="magazine-copy"><span className="magazine-kicker">{post.createdAt ? new Date(post.createdAt).toLocaleDateString(lang === 'fa' ? 'fa-IR' : 'en-US') : (lang === 'fa' ? 'مجله' : 'Journal')}</span><h3><Link to={postUrl(post)} target="_blank" rel="noopener noreferrer"><InlineText text={localized(post.title, lang)} /></Link></h3><p>{localized(post.excerpt, lang)}</p><PostTags post={post} lang={lang} /><Link className="magazine-read" to={postUrl(post)} target="_blank" rel="noopener noreferrer">{lang === 'fa' ? 'خواندن مطلب' : 'Read article'}</Link></div>
   </article>;
 }
@@ -100,30 +128,30 @@ export function AdReservation({ lang, socials }) {
   return <a className="sidebar-ad is-empty ad-flow-reserve" href={adReservationHref(socials)} target="_blank" rel="noopener noreferrer"><span>{lang === 'fa' ? 'محل تبلیغ شما' : 'Your ad here'}</span><small>{lang === 'fa' ? 'برای رزرو، اینجا کلیک کنید' : 'Click here to reserve'}</small></a>;
 }
 
-export function TimedAd({ ad, lang, index = 0 }) {
+export function TimedAd({ ad, lang }) {
   const [visible, setVisible] = useState(false);
   const slot = useRef(null);
-  const delay = Math.min(800 + index * 400, 2000);
   useEffect(() => {
     if (visible || !slot.current) return undefined;
     let timer;
+    const reveal = () => setVisible(true);
     const observer = typeof IntersectionObserver === 'undefined' ? null : new IntersectionObserver(([entry]) => {
       clearTimeout(timer);
-      if (entry.isIntersecting) timer = setTimeout(() => setVisible(true), delay);
-    }, { threshold: 0.1 });
+      if (entry.isIntersecting) timer = setTimeout(reveal, 120);
+    }, { rootMargin: '480px 0px' });
     if (observer) observer.observe(slot.current);
-    else timer = setTimeout(() => setVisible(true), delay);
+    else reveal();
     return () => { clearTimeout(timer); observer?.disconnect(); };
-  }, [delay, visible]);
+  }, [visible]);
   const caption = lang === 'fa' ? ad.captionFa || ad.captionEn : ad.captionEn || ad.captionFa;
   return <div className={`ad-flow-slot ${visible ? 'is-ready' : 'is-pending'}`} ref={slot} aria-live="polite">
-    {visible ? <a className="sidebar-ad has-image" href={ad.href} target="_blank" rel="noopener noreferrer" aria-label={lang === 'fa' ? ad.altFa || 'تبلیغات' : ad.altEn || 'Advertisement'}><img src={ad.imageUrl} alt={lang === 'fa' ? ad.altFa || 'تبلیغات' : ad.altEn || 'Advertisement'} loading="lazy" />{caption && <span className="sidebar-ad-caption">{caption}</span>}</a> : <span className="ad-flow-wait">{lang === 'fa' ? 'جایگاه تبلیغ' : 'Advertisement'}</span>}
+    {visible ? <a className="sidebar-ad has-image" href={ad.href} target="_blank" rel="noopener noreferrer" aria-label={lang === 'fa' ? ad.altFa || 'تبلیغات' : ad.altEn || 'Advertisement'}><img src={ad.imageUrl} alt={lang === 'fa' ? ad.altFa || 'تبلیغات' : ad.altEn || 'Advertisement'} loading="eager" decoding="async" fetchPriority="low" />{caption && <span className="sidebar-ad-caption">{caption}</span>}</a> : <span className="ad-flow-wait">{lang === 'fa' ? 'جایگاه تبلیغ' : 'Advertisement'}</span>}
   </div>;
 }
 
 export function AdStack({ ads = [], lang, socials }) {
   return <div className="sidebar-ad-stack">
-    {ads.map((ad, index) => <TimedAd key={ad.id} ad={ad} lang={lang} index={index} />)}
+    {ads.map((ad) => <TimedAd key={ad.id} ad={ad} lang={lang} />)}
     <AdReservation lang={lang} socials={socials} />
   </div>;
 }
@@ -159,10 +187,10 @@ export function ArticlePage({ post, posts, lang, t, notify, refresh, ads = [], s
   if (!post || post.published === false) return <main className="editorial-page section-wrap"><Link to="/blog" target="_blank" rel="noopener noreferrer">{lang === 'fa' ? 'بازگشت به وبلاگ' : 'Back to blog'}</Link><p>{lang === 'fa' ? 'این مطلب پیدا نشد.' : 'Article not found.'}</p></main>;
   const act = async (path, payload) => { setSending(true); try { await request(path, { method: 'POST', body: JSON.stringify(payload) }); await refresh(); return true; } catch (error) { notify(error.message); return false; } finally { setSending(false); } };
   const share = async () => { try { if (navigator.share) await navigator.share({ title: localized(post.title, lang), url: window.location.href }); else { await navigator.clipboard.writeText(window.location.href); notify(lang === 'fa' ? 'لینک کپی شد.' : 'Link copied.'); } } catch { /* Share sheet was closed. */ } };
-  return <main className="editorial-page section-wrap"><div className="magazine-layout"><article className="article-page"><Link className="article-back" to="/blog" target="_blank" rel="noopener noreferrer">{lang === 'fa' ? 'همه مطالب' : 'All stories'}</Link><span className="magazine-kicker">{post.createdAt && new Date(post.createdAt).toLocaleDateString(lang === 'fa' ? 'fa-IR' : 'en-US')}</span><h1><InlineText text={localized(post.title, lang)} /></h1><p className="article-deck">{localized(post.excerpt, lang)}</p>{post.image ? <img className="article-cover" src={post.image} alt="" /> : <div className="article-cover article-poster-fallback"><span>{lang === 'fa' ? '\u0645\u062c\u0644\u0647' : 'JOURNAL'}</span><strong>{localized(post.title, lang)}</strong></div>}<ArticleBody body={localized(post.body, lang)} /><PostTags post={post} lang={lang} /><div className="post-actions"><button disabled={sending} onClick={() => act(`/api/posts/${encodeURIComponent(post.id)}/like`, {})}>♡ {t.like} · {Number(post.likes || 0)}</button><button onClick={share}>{t.share}</button></div><section className="article-comments"><h2>{t.comments} ({post.comments?.length || 0})</h2><form className="comment-form" onSubmit={async (event) => { event.preventDefault(); if (await act(`/api/posts/${encodeURIComponent(post.id)}/comments`, { author: author.trim(), body: comment.trim() })) setComment(''); }}><input value={author} onChange={(event) => setAuthor(event.target.value)} placeholder={t.name} maxLength="60" required /><textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder={t.commentPlaceholder} maxLength="2000" required /><button className="button button-primary" disabled={sending}>{t.send}</button></form>{(post.comments || []).map((item) => <div className="comment-thread" key={item.id}><div className="comment-item"><b>{item.author}</b><p>{item.body}</p></div>{(item.replies || []).map((reply) => <div className="comment-item admin-reply" key={reply.id}><img src={portrait} alt="" /><div><b>عباس روحانی تبار</b><p>{reply.body}</p></div></div>)}</div>)}</section></article><PostSidebar posts={posts.filter((item) => item.published !== false)} lang={lang} ads={ads} socials={socials} /></div></main>;
+  return <main className="editorial-page section-wrap"><div className="magazine-layout"><article className="article-page"><Link className="article-back" to="/blog" target="_blank" rel="noopener noreferrer">{lang === 'fa' ? 'همه مطالب' : 'All stories'}</Link><span className="magazine-kicker">{post.createdAt && new Date(post.createdAt).toLocaleDateString(lang === 'fa' ? 'fa-IR' : 'en-US')}</span><h1><InlineText text={localized(post.title, lang)} /></h1><p className="article-deck">{localized(post.excerpt, lang)}</p>{post.image ? <img className="article-cover" src={post.image} alt="" fetchPriority="high" decoding="async" /> : <div className="article-cover article-poster-fallback"><span>{lang === 'fa' ? '\u0645\u062c\u0644\u0647' : 'JOURNAL'}</span><strong>{localized(post.title, lang)}</strong></div>}<ArticleBody body={localized(post.body, lang)} /><PostTags post={post} lang={lang} /><div className="post-actions"><button disabled={sending} onClick={() => act(`/api/posts/${encodeURIComponent(post.id)}/like`, {})}>♡ {t.like} · {Number(post.likes || 0)}</button><button onClick={share}>{t.share}</button></div><section className="article-comments"><h2>{t.comments} ({post.comments?.length || 0})</h2><form className="comment-form" onSubmit={async (event) => { event.preventDefault(); if (await act(`/api/posts/${encodeURIComponent(post.id)}/comments`, { author: author.trim(), body: comment.trim() })) setComment(''); }}><input value={author} onChange={(event) => setAuthor(event.target.value)} placeholder={t.name} maxLength="60" required /><textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder={t.commentPlaceholder} maxLength="2000" required /><button className="button button-primary" disabled={sending}>{t.send}</button></form>{(post.comments || []).map((item) => <div className="comment-thread" key={item.id}><div className="comment-item"><b>{item.author}</b><p>{item.body}</p></div>{(item.replies || []).map((reply) => <div className="comment-item admin-reply" key={reply.id}><img src={portrait} alt="" /><div><b>عباس روحانی تبار</b><p>{reply.body}</p></div></div>)}</div>)}</section></article><PostSidebar posts={posts.filter((item) => item.published !== false)} lang={lang} ads={ads} socials={socials} /></div></main>;
 }
 
 export function ProjectsPage({ projects, lang, t, ads = [], socials }) {
   const ordered = projects;
-  return <main className="editorial-page section-wrap"><div className="editorial-header"><span className="eyebrow">{lang === 'fa' ? 'نمونه‌کارها' : 'Portfolio'}</span><h1>{lang === 'fa' ? 'همه پروژه‌ها' : 'All projects'}</h1><p>{lang === 'fa' ? 'پروژه‌ها و تجربه‌های من در طراحی و توسعه وب.' : 'My work across web design and development.'}</p></div><div className="magazine-layout projects-layout"><div className="magazine-main">{ordered.length ? <div className="project-grid">{ordered.map((project, index) => <ProjectCard key={project.id} project={project} lang={lang} t={t} index={index} />)}</div> : <p className="empty-state">{t.emptyProjects}</p>}</div><aside className="magazine-sidebar"><AdStack ads={ads} lang={lang} socials={socials} /></aside></div></main>;
+  return <main className="editorial-page section-wrap"><div className="editorial-header"><span className="eyebrow">{lang === 'fa' ? 'نمونه‌کارها' : 'Portfolio'}</span><h1>{lang === 'fa' ? 'همه پروژه‌ها' : 'All projects'}</h1><p>{lang === 'fa' ? 'پروژه‌ها و تجربه‌های من در طراحی و توسعه وب.' : 'My work across web design and development.'}</p></div><div className="magazine-layout projects-layout"><div className="magazine-main">{ordered.length ? <div className="project-grid">{ordered.map((project, index) => <ProjectCard key={project.id} project={project} lang={lang} t={t} index={index} priority={index === 0} />)}</div> : <p className="empty-state">{t.emptyProjects}</p>}</div><aside className="magazine-sidebar"><AdStack ads={ads} lang={lang} socials={socials} /></aside></div></main>;
 }
