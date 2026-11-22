@@ -1,7 +1,17 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import PropTypes from 'prop-types';
 
-const logoToneCache = new Map();
+const wikimediaThumbnails = 'https://thumb.wikimedia.org/wikipedia/commons/thumb';
+const localSocialLogos = new Map([
+  ['https://cdn.simpleicons.org/github/181717', '/icons/social-github.webp'],
+  ['https://cdn.simpleicons.org/telegram/26A5E4', '/icons/social-telegram.webp'],
+  ['https://cdn.simpleicons.org/whatsapp/25D366', '/icons/social-whatsapp.webp'],
+  [`${wikimediaThumbnails}/8/81/LinkedIn_icon.svg/1280px-LinkedIn_icon.svg.png`, '/icons/social-linkedin.webp'],
+  [`${wikimediaThumbnails}/7/7e/Gmail_icon_%282020%29.svg/3840px-Gmail_icon_%282020%29.svg.png`, '/icons/social-gmail.webp'],
+  [`${wikimediaThumbnails}/9/95/Instagram_logo_2022.svg/1280px-Instagram_logo_2022.svg.png`, '/icons/social-instagram.webp'],
+]);
+
+const logoToneCache = new Map(Array.from(localSocialLogos.values(), (source) => [source, source === '/icons/social-github.webp']));
 const themeListeners = new Set();
 let themeObserver;
 
@@ -31,8 +41,10 @@ function isMostlyBlack(image) {
   let darkNeutral = 0;
   let luminanceTotal = 0;
   for (let index = 0; index < pixels.length; index += 4) {
-    const [red, green, blue, alpha] = pixels.slice(index, index + 4);
-    if (alpha < 48) continue;
+    if (pixels[index + 3] < 48) continue;
+    const red = pixels[index];
+    const green = pixels[index + 1];
+    const blue = pixels[index + 2];
     visible += 1;
     const max = Math.max(red, green, blue);
     const min = Math.min(red, green, blue);
@@ -44,48 +56,51 @@ function isMostlyBlack(image) {
 }
 
 export default function AdaptiveLogo({ src, alt = '', className = '', loading }) {
-  const [needsLightBacking, setNeedsLightBacking] = useState(() => logoToneCache.get(src) || false);
-  const [nearby, setNearby] = useState(() => loading !== 'lazy' || typeof IntersectionObserver === 'undefined');
-  const wrapper = useRef(null);
+  const stockSource = src?.replace(/\?utm_source=commons\.wikimedia\.org&utm_campaign=index&utm_content=thumbnail$/, '');
+  const source = localSocialLogos.get(stockSource) || src;
+  const [tone, setTone] = useState(null);
+  const image = useRef(null);
   const darkTheme = useSyncExternalStore(subscribeTheme, isDarkTheme, () => false);
+  const needsLightBacking = tone && tone.source === source ? tone.dark : logoToneCache.get(source);
 
   useEffect(() => {
-    if (nearby || !wrapper.current) return undefined;
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) { setNearby(true); observer.disconnect(); }
-    }, { rootMargin: '1200px' });
-    observer.observe(wrapper.current);
-    return () => observer.disconnect();
-  }, [nearby]);
-
-  useEffect(() => {
-    let active = true;
-    if (!src || !darkTheme || !nearby) return undefined;
-    if (logoToneCache.has(src)) {
-      setNeedsLightBacking(logoToneCache.get(src));
-      return undefined;
-    }
-    const inspect = () => {
-      const probe = new Image();
-      probe.crossOrigin = 'anonymous';
-      probe.onload = () => {
-        let isBlack = false;
-        try { isBlack = isMostlyBlack(probe); } catch (_) { isBlack = true; }
-        logoToneCache.set(src, isBlack);
-        if (active) setNeedsLightBacking(isBlack);
-      };
-      probe.onerror = () => {
-        logoToneCache.set(src, true);
-        if (active) setNeedsLightBacking(true);
-      };
-      probe.src = src;
+    const current = image.current;
+    if (!source || !darkTheme || !current || logoToneCache.has(source)) return undefined;
+    let probe;
+    const remember = (dark) => {
+      logoToneCache.set(source, dark);
+      setTone({ source, dark });
     };
-    inspect();
-    return () => { active = false; };
-  }, [src, darkTheme, nearby]);
+    const inspect = () => {
+      try {
+        remember(isMostlyBlack(current));
+      } catch (error) {
+        if (error.name !== 'SecurityError') {
+          remember(true);
+          return;
+        }
+        probe = new Image();
+        probe.crossOrigin = 'anonymous';
+        probe.onload = () => {
+          try { remember(isMostlyBlack(probe)); } catch (_) { remember(true); }
+        };
+        probe.onerror = () => remember(true);
+        probe.src = source;
+      }
+    };
+    if (current.complete && current.naturalWidth) inspect();
+    else current.addEventListener('load', inspect, { once: true });
+    return () => {
+      current.removeEventListener('load', inspect);
+      if (probe) {
+        probe.onload = null;
+        probe.onerror = null;
+      }
+    };
+  }, [source, darkTheme]);
 
-  return <span ref={wrapper} className={`adaptive-logo${needsLightBacking ? ' has-light-backing' : ''}`}>
-    {nearby && <img className={className} src={src} alt={alt} loading={loading} />}
+  return <span className={`adaptive-logo${needsLightBacking ? ' has-light-backing' : ''}`}>
+    <img ref={image} className={className} src={source} alt={alt} loading={loading} decoding="async" />
   </span>;
 }
 

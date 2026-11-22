@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
+const { isIPv4 } = require('node:net');
 const path = require('node:path');
 const zlib = require('node:zlib');
 const { execFile } = require('node:child_process');
@@ -263,17 +264,34 @@ function proxyRequest(req, res, localPort) {
   req.pipe(upstream);
 }
 
-function deploymentForHost(host, projects, baseDomain = 'localhost', localAddress = '') {
-  const hostname = String(host || '').split(':')[0].toLowerCase();
+function demoDomains(baseDomain, localAddress) {
+  const domains = new Set(['localhost', baseDomain.toLowerCase()]);
   const lanAddress = String(localAddress).replace(/^::ffff:/, '');
+  if (isIPv4(lanAddress)) domains.add(`${lanAddress}.nip.io`);
+  return domains;
+}
+
+function hostName(host) {
+  return String(host || '').replace(/:\d+$/, '').replace(/\.$/, '').toLowerCase();
+}
+
+function isDemoHost(host, projects, baseDomain, localAddress) {
+  const hostname = hostName(host);
+  return [...demoDomains(baseDomain, localAddress)].some((domain) => hostname.endsWith(`.${domain}`))
+    || (projects || []).some(({ deployment }) => deployment?.customDomain && hostname === hostName(deployment.customDomain));
+}
+
+function deploymentForHost(host, projects, baseDomain = 'localhost', localAddress = '') {
+  const hostname = hostName(host);
+  const domains = demoDomains(baseDomain, localAddress);
   for (const project of projects || []) {
     const deployment = project.deployment;
     if (!deployment || deployment.status !== 'running' || (deployment.runtimeKind !== 'static' && !deployment.localPort) || (deployment.runtimeKind === 'static' && !deployment.sourceDir)) continue;
-    if (hostname === deployment.customDomain?.toLowerCase()) return deployment;
-    if (hostname === `${project.demoSubdomain || deployment.subdomain}.${baseDomain}`.toLowerCase()) return deployment;
-    if (lanAddress && hostname === `${project.demoSubdomain || deployment.subdomain}.${lanAddress}.nip.io`.toLowerCase()) return deployment;
+    if (deployment.customDomain && hostname === hostName(deployment.customDomain)) return deployment;
+    const subdomain = (project.demoSubdomain || deployment.subdomain || '').toLowerCase();
+    if (subdomain && [...domains].some((domain) => hostname === `${subdomain}.${domain}`)) return deployment;
   }
   return null;
 }
 
-module.exports = { DEPLOYMENTS_DIR, MAX_ARCHIVE_BYTES, validateSubdomain, extractZip, deployProject, removeRuntime, proxyRequest, deploymentForHost };
+module.exports = { DEPLOYMENTS_DIR, MAX_ARCHIVE_BYTES, validateSubdomain, extractZip, deployProject, removeRuntime, proxyRequest, deploymentForHost, isDemoHost };

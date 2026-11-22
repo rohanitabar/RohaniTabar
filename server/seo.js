@@ -3,6 +3,8 @@ const crypto = require('node:crypto');
 const { createElement } = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { Hero, mobilePortraitQuery } = require('../src/app/Hero');
+const { sectionIdsByPath } = require('../src/app/portfolioSections');
+const { getListingCover } = require('../src/features/editorial/listing');
 
 const BRAND = 'Abbas Rohani Tabar';
 const HOME_TITLE = 'عباس روحانی‌تبار | توسعه‌دهنده فرانت‌اند';
@@ -40,7 +42,7 @@ function pageMetadata(pathname, posts, origin) {
   const path = pathname.replace(/\/$/, '') || '/';
   const base = { title: HOME_TITLE, description: HOME_DESCRIPTION, path: '/', type: 'website', status: 200, noindex: false, image: imageUrl('/icons/brand.jpg', origin) };
   if (path === '/') return base;
-  if (['/about', '/experience', '/skills', '/featured-projects', '/latest-posts', '/contact'].includes(path)) return base;
+  if (sectionIdsByPath[path]) return base;
   if (path === '/blog') return { ...base, title: `وبلاگ | ${BRAND}`, description: 'مقاله‌ها و یادداشت‌های عباس روحانی‌تبار درباره طراحی و توسعه وب.', path };
   if (path === '/projects') return { ...base, title: `پروژه‌ها | ${BRAND}`, description: 'نمونه پروژه‌ها و دموهای عباس روحانی‌تبار در توسعه وب.', path };
   if (path === '/admin') return { ...base, title: `پنل مدیریت | ${BRAND}`, path, noindex: true };
@@ -59,6 +61,18 @@ function pageMetadata(pathname, posts, origin) {
   return { ...base, title: `صفحه پیدا نشد | ${BRAND}`, status: 404, noindex: true };
 }
 
+function sitePreferences(cookie) {
+  const preferences = cookie.split(';').map((value) => value.trim());
+  return {
+    lang: preferences.includes('portfolio-language=en') ? 'en' : 'fa',
+    theme: preferences.includes('portfolio-theme=dark') ? 'dark' : 'light'
+  };
+}
+
+function setHtmlPreferences(html, { lang, theme }) {
+  return html.replace(/<html[^>]*>/i, `<html lang="${lang}" dir="${lang === 'fa' ? 'rtl' : 'ltr'}" data-theme="${theme}">`);
+}
+
 function renderHome(template, assets, cookie = '') {
   const { images, css, cssPath, logo } = assets;
   const root = '<div id="root"></div>';
@@ -67,9 +81,7 @@ function renderHome(template, assets, cookie = '') {
   const isPortrait = (src) => /^\/static\/media\/[a-zA-Z0-9._-]+\.webp$/.test(src || '');
   if (!bundle || !css || !isPortrait(images?.mobile) || !isPortrait(images?.desktop) || !template.includes(root) || !template.includes(stylesheet)) return null;
 
-  const preferences = cookie.split(';').map((value) => value.trim());
-  const lang = preferences.includes('portfolio-language=en') ? 'en' : 'fa';
-  const theme = preferences.includes('portfolio-theme=dark') ? 'dark' : 'light';
+  const { lang, theme } = sitePreferences(cookie);
   const preloads = [[images.mobile, mobilePortraitQuery], [images.desktop, '(width > 680px)']].map(([src, media]) =>
     `<link rel="preload" as="image" type="image/webp" href="${src}" media="${media}" fetchpriority="high">`).join('');
   const hero = renderToStaticMarkup(createElement(Hero, { lang, images }));
@@ -108,8 +120,7 @@ function renderHome(template, assets, cookie = '') {
       launch();
     }
   })();`;
-  const html = template
-    .replace(/<html[^>]*>/i, `<html lang="${lang}" dir="${lang === 'fa' ? 'rtl' : 'ltr'}" data-theme="${theme}">`)
+  const html = setHtmlPreferences(template, { lang, theme })
     .replace('<title>', `${preloads}<title>`)
     .replace(stylesheet, () => `<style>${css}</style>`)
     .replace(bundle[0], '')
@@ -117,9 +128,38 @@ function renderHome(template, assets, cookie = '') {
   return { html, startup };
 }
 
-function renderHtml(template, pathname, posts, origin, publicData = null, homeAssets = {}, cookie = '') {
+const emptyRoot = '<div id="root"></div>';
+const maxBootstrapBytes = 200000;
+const serializeBootstrap = (data) => JSON.stringify(data).replace(/</g, '\\u003c');
+
+function pageBootstrap(publicData, post) {
+  const data = serializeBootstrap(publicData);
+  if (Buffer.byteLength(data) < maxBootstrapBytes) return { data, publicData, partial: false };
+  const summaries = publicData.posts?.map(({ body, comments, ...summary }) => summary.id === post?.id ? { ...summary, body, comments } : { ...summary, commentCount: comments?.length || 0 });
+  const compact = { ...publicData, posts: summaries };
+  const serialized = serializeBootstrap(compact);
+  return Buffer.byteLength(serialized) < maxBootstrapBytes ? { data: serialized, publicData: compact, partial: true } : null;
+}
+
+function renderPublicPage(template, publicData, preferences, request) {
+  if (!request.renderer || !template.includes(emptyRoot)) return null;
+  const { location, hostname, protocol, renderer } = request;
+  try {
+    const markup = renderer({ location, hostname, protocol, publicData, initialLanguage: preferences.lang, initialTheme: preferences.theme });
+    return setHtmlPreferences(template, preferences).replace(emptyRoot, () => `<div id="root" data-rendered="true">${markup}</div>`);
+  } catch (error) {
+    console.error('Could not render the portfolio on the server:', error.message);
+    return null;
+  }
+}
+
+function renderHtml(template, pathname, posts, origin, publicData = null, homeAssets = {}, cookie = '', request = {}) {
   const page = pageMetadata(pathname, posts, origin);
   const route = pathname.replace(/\/$/, '') || '/';
+  const initial = publicData && !page.noindex ? pageBootstrap(publicData, page.post) : null;
+  const sectionId = sectionIdsByPath[route];
+  const canRender = route === '/blog' || route === '/projects' || page.post || sectionId;
+  const rendered = initial && canRender ? renderPublicPage(template, initial.publicData, sitePreferences(cookie), request) : null;
   const url = origin && !page.noindex ? `${origin}${page.path}` : '';
   const tags = [
     `<meta name="robots" content="${page.noindex ? 'noindex,nofollow' : 'index,follow'}" />`,
@@ -130,14 +170,11 @@ function renderHtml(template, pathname, posts, origin, publicData = null, homeAs
     `<meta property="og:description" content="${escapeHtml(page.description)}" />`,
     '<meta name="twitter:card" content="summary_large_image" />'
   ];
-  if (route === '/projects' || route === '/featured-projects') {
-    const firstProject = (publicData?.projects || []).find((project) => route === '/projects' || project.featured !== false);
-    const cover = firstProject?.displayImage || firstProject?.image;
-    if (/^\/uploads\/[a-zA-Z0-9._-]+$/.test(cover || '')) {
-      tags.unshift(`<link rel="preload" as="image" href="${escapeHtml(cover)}" fetchpriority="high" />`);
-    }
+  if (!rendered) {
+    const cover = page.post?.image || getListingCover(route, publicData, request.search);
+    const preload = /^\/uploads\/[a-zA-Z0-9._-]+$/.test(cover || '') ? (page.post && origin ? origin + cover : cover) : cover && imageUrl(cover, origin);
+    if (preload) tags.unshift(`<link rel="preload" as="image" href="${escapeHtml(preload)}" fetchpriority="high" />`);
   }
-  if (page.post && origin && page.image?.startsWith(`${origin}/uploads/`)) tags.push(`<link rel="preload" as="image" href="${escapeHtml(page.image)}" fetchpriority="high" />`);
   tags.push(`<meta name="twitter:title" content="${escapeHtml(page.title)}" />`, `<meta name="twitter:description" content="${escapeHtml(page.description)}" />`);
   let structuredDataHash = '';
   if (url) tags.push(`<link rel="canonical" href="${escapeHtml(url)}" />`, `<meta property="og:url" content="${escapeHtml(url)}" />`);
@@ -151,21 +188,23 @@ function renderHtml(template, pathname, posts, origin, publicData = null, homeAs
     tags.push(`<script type="application/ld+json">${structuredData}</script>`);
   }
   let bootstrap = '';
-  if (publicData && !page.noindex) {
-    const data = JSON.stringify(publicData).replace(/</g, '\\u003c');
-    if (Buffer.byteLength(data) < 200000) {
-      structuredDataHash = `${structuredDataHash} 'sha256-${crypto.createHash('sha256').update(data).digest('base64')}'`.trim();
-      bootstrap = `<script id="site-bootstrap" type="application/json">${data}</script>`;
-    }
+  if (initial) {
+    structuredDataHash = `${structuredDataHash} 'sha256-${crypto.createHash('sha256').update(initial.data).digest('base64')}'`.trim();
+    bootstrap = `<script id="site-bootstrap" type="application/json"${initial.partial ? ' data-partial="true"' : ''}>${initial.data}</script>`;
   }
   const home = route === '/' ? renderHome(template, homeAssets, cookie) : null;
   if (home) {
     structuredDataHash = `${structuredDataHash} 'sha256-${crypto.createHash('sha256').update(home.startup).digest('base64')}'`.trim();
     bootstrap += `<script>${home.startup}</script>`;
   }
-  const html = (home?.html || template)
-    .replace(/<title>[^<]*<\/title>/i, `<title>${escapeHtml(page.title)}</title>`)
-    .replace(/<meta name="description"[^>]*>/i, `<meta name="description" content="${escapeHtml(page.description)}" />`)
+  if (rendered && sectionId) {
+    const scroll = `document.getElementById(${JSON.stringify(sectionId)})?.scrollIntoView({behavior:'instant'});`;
+    structuredDataHash = `${structuredDataHash} 'sha256-${crypto.createHash('sha256').update(scroll).digest('base64')}'`.trim();
+    bootstrap = `<script>${scroll}</script>${bootstrap}`;
+  }
+  const html = (rendered || home?.html || template)
+    .replace(/<title>[^<]*<\/title>/i, () => `<title>${escapeHtml(page.title)}</title>`)
+    .replace(/<meta name="description"[^>]*>/i, () => `<meta name="description" content="${escapeHtml(page.description)}" />`)
     .replace('</head>', () => `    ${tags.join('\n    ')}\n  </head>`)
     .replace('</body>', () => `${bootstrap}</body>`);
   return { html, status: page.status, noindex: page.noindex, structuredDataHash };

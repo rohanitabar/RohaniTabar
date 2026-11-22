@@ -34,10 +34,13 @@ export async function reportClientIssue(scope, message, details = '') {
 }
 
 export async function monitoredFetch(input, options = {}, scope = 'api') {
+  const { timeoutMs, ...requestOptions } = options;
   const safeToRetry = !options.method || options.method.toUpperCase() === 'GET' || options.method.toUpperCase() === 'HEAD';
   let lastError;
   for (let attempt = 0; attempt < (safeToRetry ? 2 : 1); attempt += 1) {
-    try { return await window.fetch(input, options); }
+    if (requestOptions.signal?.aborted) throw requestOptions.signal.reason;
+    const signal = requestOptions.signal || (timeoutMs ? AbortSignal.timeout?.(timeoutMs) : undefined);
+    try { return await window.fetch(input, { ...requestOptions, signal }); }
     catch (error) {
       lastError = error;
       if (attempt === 0 && safeToRetry) await new Promise((resolve) => window.setTimeout(resolve, 350));

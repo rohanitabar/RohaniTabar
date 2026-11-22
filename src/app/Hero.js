@@ -27,7 +27,7 @@ const heroCopy = {
   }
 };
 
-function Hero({ lang, images, Link = 'a' }) {
+function Hero({ lang, images, Link = 'a', priority = true }) {
   const text = heroCopy[lang];
   const action = (path, className, label) =>
     h(Link, { [Link === 'a' ? 'href' : 'to']: path, className }, label);
@@ -46,7 +46,7 @@ function Hero({ lang, images, Link = 'a' }) {
       h('div', { className: 'portrait-glow' }),
       h('picture', { className: 'portrait-frame' },
         h('source', { media: mobilePortraitQuery, srcSet: images.mobile, type: 'image/webp' }),
-        h('img', { src: images.desktop, width: 900, height: 900, alt: text.portrait, fetchPriority: 'high' })),
+        h('img', { src: images.desktop, width: 900, height: 900, alt: text.portrait, ...(priority ? { fetchPriority: 'high' } : { loading: 'lazy', fetchPriority: 'low' }) })),
       h('span', { className: 'floating-chip chip-top' }, text.role),
       h('span', { className: 'floating-chip chip-bottom' }, h('span', { className: 'status-dot' }), ' ', text.availability)));
 }

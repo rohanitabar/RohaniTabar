@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import AdaptiveLogo from '../../components/ui/AdaptiveLogo';
 import { ArticleEditor } from '../editorial/Editorial';
 import { reportClientIssue } from '../../lib/diagnostics';
+import apiVersion from '../../lib/apiVersion';
 const SortableList = lazy(() => import('../../components/ui/SortableList'));
 const CareerAdmin = lazy(() => import('../career/CareerAdmin'));
 const AdminAd = lazy(() => import('./AdminExtras').then((module) => ({ default: module.AdminAd })));
@@ -44,7 +45,7 @@ export default function AdminPage({ t, lang, data, refresh, onCareerSaved, notif
       notify(lang === 'fa' ? 'ترتیب ذخیره شد.' : 'Order saved.');
     }, kind === 'skills' ? 'skill' : kind === 'socials' ? 'social' : kind === 'projects' ? 'project' : 'ad');
   };
-  const loadStatus = useCallback(async () => { try { const setup = await api('/api/admin/status'); if (setup.apiVersion !== 24) { setStatus({ outdated: true }); return; } const me = await api('/api/admin/me').catch(() => ({ authenticated: false })); setStatus(setup); setAuthenticated(me.authenticated); if (me.authenticated) await refresh(); } catch { setStatus({ unavailable: true }); } }, [api, refresh]);
+  const loadStatus = useCallback(async () => { try { const setup = await api('/api/admin/status'); if (setup.apiVersion !== apiVersion) { setStatus({ outdated: true }); return; } const me = await api('/api/admin/me').catch(() => ({ authenticated: false })); setStatus(setup); setAuthenticated(me.authenticated); if (me.authenticated) await refresh(); } catch { setStatus({ unavailable: true }); } }, [api, refresh]);
   useEffect(() => { loadStatus(); }, [loadStatus]);
   useEffect(() => { if (!authenticated) return undefined; window.addEventListener('focus', loadStatus); return () => window.removeEventListener('focus', loadStatus); }, [authenticated, loadStatus]);
   useEffect(() => { if (!authenticated) return undefined; const timer = window.setInterval(refresh, 30000); return () => window.clearInterval(timer); }, [authenticated, refresh]);
@@ -179,7 +180,7 @@ export default function AdminPage({ t, lang, data, refresh, onCareerSaved, notif
         <h3 className="admin-subheading">{lang === 'fa' ? 'مطالب منتشرشده و پیش‌نویس‌ها' : 'Published posts and drafts'}</h3><ul className="admin-list">{data.posts.map((post) => <li key={post.id}><span>{localized(post.title, lang)}{!post.published && <small>{lang === 'fa' ? 'پیش‌نویس' : 'Draft'}</small>}{post.translationStatus === 'pending' && <small>{lang === 'fa' ? 'ترجمهٔ انگلیسی در انتظار' : 'English translation pending'}</small>}</span><span className="post-admin-actions"><button className="edit-action" onClick={() => { setEditingPost(post); setPostCoverPreview(''); document.getElementById('post-management')?.scrollIntoView({ behavior: 'smooth' }); }}>{lang === 'fa' ? 'ویرایش' : 'Edit'}</button><button onClick={() => remove(`/api/admin/posts/${encodeURIComponent(post.id)}`)} aria-label={t.delete}>×</button></span></li>)}</ul>
       </section></div>}
     {activeTab === 'inbox' && <div className="admin-grid"><AdminMessages messages={data.messages || []} lang={lang} refresh={refresh} /><AdminComments posts={data.posts} lang={lang} refresh={refresh} /></div>}
-    {activeTab === 'promotion' && <div className="admin-grid"><AdminAd ads={data.ads} lang={lang} refresh={refresh} /><AdminPush lang={lang} posts={data.posts} /></div>}
+    {activeTab === 'promotion' && <div className="admin-grid"><AdminAd ads={data.ads} lang={lang} refresh={refresh} uploadImage={uploadImage} /><AdminPush lang={lang} posts={data.posts} /></div>}
     {activeTab === 'notices' && <div className="admin-grid admin-single"><AdminNotices lang={lang} onCountChange={setUnresolvedNoticeCount} /></div>}
     {error && !errorScope && <p className="error-text" role="alert">{error}</p>}
   </main>;

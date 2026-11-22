@@ -12,6 +12,7 @@
   },
   "scripts": {
     "start": "node scripts/start-dev.js",
+    "dev": "npm start",
     "start:ui": "react-scripts start",
     "start:api": "node server/index.js",
     "preview": "node scripts/preview.js",

@@ -3,6 +3,6 @@ import { BrowserRouter } from 'react-router';
 import Portfolio from './Portfolio';
 import '../styles/App.css';
 
-export default function App() {
-  return <BrowserRouter><Portfolio /></BrowserRouter>;
+export default function App(props) {
+  return <BrowserRouter><Portfolio {...props} /></BrowserRouter>;
 }

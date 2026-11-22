@@ -13,7 +13,7 @@ async function request(url, options = {}) {
   return result;
 }
 
-export function AdminAd({ ads = [], lang, refresh }) {
+export function AdminAd({ ads = [], lang, refresh, uploadImage }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
@@ -26,11 +26,7 @@ export function AdminAd({ ads = [], lang, refresh }) {
     try {
       const fields = new FormData(form);
       const file = fields.get('imageFile');
-      let imageUrl = String(fields.get('imageUrl') || '').trim();
-      if (file?.size) {
-        const result = await request('/api/admin/media?type=ad-image', { method: 'POST', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' } });
-        imageUrl = result.url;
-      }
+      const imageUrl = file?.size ? await uploadImage(file, 'ad-image') : String(fields.get('imageUrl') || '').trim();
       await request(editingId ? `/api/admin/ads/${encodeURIComponent(editingId)}` : '/api/admin/ads', { method: editingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageUrl, href: fields.get('href'), altFa: fields.get('altFa'), altEn: fields.get('altEn'), captionFa: fields.get('captionFa') }) });
       setEditingId(''); form.reset(); await refresh();
     } catch (problem) { setError(problem.message); } finally { setBusy(false); }

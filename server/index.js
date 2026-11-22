@@ -7,10 +7,17 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const zlib = require('node:zlib');
 const webPush = require('web-push');
-const { DEPLOYMENTS_DIR, validateSubdomain, deployProject, removeRuntime, proxyRequest, deploymentForHost } = require('./deployments');
+const API_VERSION = require('../src/lib/apiVersion');
+const { DEPLOYMENTS_DIR, validateSubdomain, deployProject, removeRuntime, proxyRequest, deploymentForHost, isDemoHost } = require('./deployments');
 const { publicOrigin, renderHtml, sitemapXml, robotsText } = require('./seo');
+const { translateToEnglish } = require('./translation');
+const { demoTunnelHostname, demoTunnelPath } = require('../src/features/editorial/demoTunnel');
 
 const ROOT = path.resolve(__dirname, '..');
+const buildRoot = path.join(ROOT, 'build');
+const serverBuildDir = path.join(buildRoot, '.server');
+const rendererFile = path.join(serverBuildDir, 'render.cjs');
+const renderPortfolio = fs.existsSync(rendererFile) ? require(rendererFile) : null;
 const HOME_ASSETS = (() => {
   try {
     const files = JSON.parse(fs.readFileSync(path.join(ROOT, 'build', 'asset-manifest.json'), 'utf8')).files || {};
@@ -30,10 +37,7 @@ const PUSH_SUBSCRIPTIONS_FILE = path.join(DATA_DIR, 'push-subscriptions.json');
 const PUSH_KEYS_FILE = path.join(DATA_DIR, 'push-keys.json');
 const UPLOAD_DIR = path.resolve(process.env.PORTFOLIO_UPLOAD_DIR || path.join(ROOT, 'public', 'uploads'));
 const PORT = Number(process.env.PORT || 5000);
-// Port 5001 is reserved for the local LibreTranslate service.
-const defaultDemoPort = PORT + 1 === 5001 ? 5002 : PORT + 1;
-const LOCAL_DEMO_PORT = Number(process.env.LOCAL_DEMO_PORT || defaultDemoPort);
-const API_VERSION = 24;
+const DEMO_PORT = Number(process.env.LOCAL_DEMO_PORT || 5001);
 const STATIC_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https:; img-src 'self' https: data: blob:; font-src 'self' https: data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'";
 const SESSION_COOKIE = 'portfolio_session';
 const SESSION_TTL = 7 * 24 * 60 * 60 * 1000;
@@ -416,11 +420,10 @@ function optimizedProjectImage(url) {
 function visibleData(includeDrafts = false) {
   const projects = store.projects.map((project) => {
     const deployment = project.deployment;
-    const localDemoUrl = deployment?.localUrl || '';
     const publicDomain = process.env.DEMO_BASE_DOMAIN;
-    const productionDemoUrl = project.demoUrl || (publicDomain && publicDomain !== 'localhost' && project.demoSubdomain ? `https://${project.demoSubdomain}.${publicDomain}` : '');
-    const publicDemoUrl = deployment?.status === 'running' ? (process.env.NODE_ENV === 'production' ? productionDemoUrl : localDemoUrl) : project.demoUrl;
-    const publicDeployment = deployment ? { status: deployment.status || 'source-ready', subdomain: project.demoSubdomain || '', url: publicDemoUrl || '', localPreviewPath: deployment.status === 'running' ? `/demo/${encodeURIComponent(project.demoSubdomain || deployment.subdomain)}/` : '', localPreviewPort: LOCAL_DEMO_PORT, uploadedAt: deployment.uploadedAt || '', deployedAt: deployment.deployedAt || '', error: includeDrafts ? deployment.error || '' : '' } : null;
+    const subdomain = project.demoSubdomain || deployment?.subdomain || '';
+    const publicDemoUrl = project.demoUrl || (publicDomain && publicDomain !== 'localhost' && subdomain ? `https://${subdomain}.${publicDomain}` : '');
+    const publicDeployment = deployment ? { status: deployment.status || 'source-ready', subdomain, url: publicDemoUrl, localPreviewPort: DEMO_PORT, uploadedAt: deployment.uploadedAt || '', deployedAt: deployment.deployedAt || '', error: includeDrafts ? deployment.error || '' : '' } : null;
     return { ...project, displayImage: optimizedProjectImage(project.image), projectType: project.projectType || (deployment?.runtimeKind === 'static' ? 'static' : 'dynamic'), targetDemoUrl: project.demoUrl || '', deployment: publicDeployment };
   });
   const career = store.career || { noExperience: false, companies: [] };
@@ -569,27 +572,6 @@ function internalPushUrl(value, req, allowExternal = false) {
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch (_) { return ''; }
 }
-async function translateToEnglish(texts) {
-  const endpoint = process.env.LIBRETRANSLATE_URL || 'http://127.0.0.1:5001/translate';
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 90000);
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: texts, source: 'fa', target: 'en', format: 'text' }),
-      signal: controller.signal
-    });
-    const result = await response.json().catch(() => ({}));
-    const translations = Array.isArray(result.translatedText) ? result.translatedText : typeof result.translatedText === 'string' && texts.length === 1 ? [result.translatedText] : null;
-    if (!response.ok || !translations || translations.length !== texts.length || translations.some((value) => typeof value !== 'string')) {
-      throw new Error('The local translation service returned an invalid response.');
-    }
-    return translations;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
 function createFormattedTranslationTask(body, translateText) {
   const parts = [];
   const translate = (text) => {
@@ -667,8 +649,9 @@ async function validatePost(body, previous = null) {
   }
   return { id: previous?.id || id(), slug: uniquePostSlug(translations.title, titleFa, previous?.id), title: { fa: titleFa, en: translations.title }, excerpt: { fa: excerptFa, en: translations.excerpt }, body: { fa: bodyFa, en: translations.body }, translationStatus: pendingFields.length ? 'pending' : 'translated', translationPendingFields: pendingFields, tags: { fa: tags, en: tags }, image, likes: [], comments: [], published: body.published === true || body.published === 'on', createdAt: new Date().toISOString() };
 }
-function serveStatic(req, res, pathname) {
+function serveStatic(req, res, requestUrl) {
   if (!['GET', 'HEAD'].includes(req.method)) return json(res, 405, { error: 'Method not allowed.' });
+  const { pathname, search, hostname } = requestUrl;
   const origin = publicOrigin(process.env.PUBLIC_ORIGIN);
   if (pathname === '/robots.txt' || pathname === '/sitemap.xml') {
     if (pathname === '/sitemap.xml' && !origin) return json(res, 503, { error: 'Set PUBLIC_ORIGIN to publish a sitemap.' });
@@ -691,9 +674,10 @@ function serveStatic(req, res, pathname) {
       fs.createReadStream(path.join(UPLOAD_DIR, filename)).on('error', () => res.destroy()).pipe(res);
     });
   }
-  const buildRoot = path.resolve(ROOT, 'build');
   const file = path.resolve(buildRoot, decoded.replace(/^\/+/, ''));
   if (file !== buildRoot && !file.startsWith(buildRoot + path.sep)) return json(res, 404, { error: 'Not found.' });
+  const relativePath = path.relative(buildRoot, file);
+  if (relativePath.split(path.sep)[0].startsWith('.') || path.extname(file).toLowerCase() === '.cjs') return json(res, 404, { error: 'Not found.' });
   fs.stat(file, (error, stat) => {
     if ((error || !stat.isFile()) && path.extname(decoded) && !decoded.startsWith('/blog/')) return json(res, 404, { error: 'Not found.' });
     const target = !error && stat.isFile() ? file : path.join(ROOT, 'build', 'index.html');
@@ -703,9 +687,11 @@ function serveStatic(req, res, pathname) {
       if (extension === '.html') {
         return fs.readFile(target, 'utf8', (htmlError, template) => {
           if (htmlError) return json(res, 500, { error: 'Could not read the website.' });
-          const page = renderHtml(template, decoded, store.posts, origin, decoded === '/admin' ? null : visibleData(false), HOME_ASSETS, req.headers.cookie);
+          const protocol = req.socket.encrypted || req.headers['x-forwarded-proto'] === 'https' || (origin && origin === `https://${requestUrl.host}`) ? 'https:' : 'http:';
+          const request = { renderer: renderPortfolio, location: pathname + search, search, hostname: forwardedTunnelHostname(req, hostname), protocol };
+          const page = renderHtml(template, pathname, store.posts, origin, decoded === '/admin' ? null : visibleData(false), HOME_ASSETS, req.headers.cookie, request);
           const body = Buffer.from(page.html);
-          const headers = { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': page.noindex ? 'no-store' : 'no-cache', 'Vary': 'Accept-Encoding', 'Content-Security-Policy': page.structuredDataHash ? STATIC_CSP.replace("script-src 'self'", `script-src 'self' ${page.structuredDataHash}`) : STATIC_CSP, 'X-Content-Type-Options': 'nosniff', ...(page.noindex ? { 'X-Robots-Tag': 'noindex, nofollow' } : {}) };
+          const headers = { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': page.noindex ? 'no-store' : 'no-cache', 'Vary': 'Accept-Encoding, Cookie', 'Content-Security-Policy': page.structuredDataHash ? STATIC_CSP.replace("script-src 'self'", `script-src 'self' ${page.structuredDataHash}`) : STATIC_CSP, 'X-Content-Type-Options': 'nosniff', ...(page.noindex ? { 'X-Robots-Tag': 'noindex, nofollow' } : {}) };
           const send = (payload, compressed) => {
             if (res.destroyed) return;
             res.writeHead(page.status, { ...headers, 'Content-Length': payload.length, ...(compressed ? { 'Content-Encoding': 'gzip' } : {}) });
@@ -715,7 +701,7 @@ function serveStatic(req, res, pathname) {
           return send(body, false);
         });
       }
-      const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.ico': 'image/x-icon', '.json': 'application/json', '.woff': 'font/woff', '.woff2': 'font/woff2' };
+      const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon', '.json': 'application/json', '.woff': 'font/woff', '.woff2': 'font/woff2' };
       const cache = extension === '.html' || target === path.join(buildRoot, 'service-worker.js') ? 'no-cache' : /[.-][a-f0-9]{8,}\./i.test(path.basename(target)) ? 'public, max-age=31536000, immutable' : 'public, max-age=3600';
       const compressible = /\.(?:js|css|svg|json)$/.test(target) && fileStat.size > 1024;
       const sendAsset = (asset, size, compressed) => {
@@ -731,10 +717,11 @@ function serveStatic(req, res, pathname) {
   });
 }
 
-async function serveDemoStatic(req, res, deployment, pathname) {
+async function serveDemoStatic(req, res, deployment, pathname, mountPath = '') {
   if (!['GET', 'HEAD'].includes(req.method)) return json(res, 405, { error: 'Method not allowed.' });
   let decoded;
   try { decoded = decodeURIComponent(pathname); } catch (_) { return json(res, 400, { error: 'Invalid path.' }); }
+  if (mountPath && decoded.split(/[\\/]+/).some((segment) => segment.startsWith('.') || segment.includes(':'))) return json(res, 404, { error: 'Not found.' });
   const root = path.resolve(deployment.sourceDir);
   let target = path.resolve(root, `.${decoded || '/'}`);
   if (target !== root && !target.startsWith(`${root}${path.sep}`)) return json(res, 404, { error: 'Not found.' });
@@ -748,20 +735,16 @@ async function serveDemoStatic(req, res, deployment, pathname) {
     stat = await fsp.stat(target).catch(() => null);
   }
   if (!stat?.isFile()) return json(res, 404, { error: 'Not found.' });
-  if (path.basename(target).toLowerCase() === 'index.html') {
-    const prefix = req.demoMountPrefix || '';
-    if (prefix) {
-      const html = await fsp.readFile(target, 'utf8');
-      const base = `<base href="${prefix}">`;
-      const rewritten = html.replace(/(\b(?:src|href)=['"])\/(?!\/)/gi, `$1${prefix}`).replace(/<head([^>]*)>/i, `<head$1>${base}`);
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
-      if (req.method === 'HEAD') return res.end();
-      return res.end(rewritten);
-    }
-  }
   if (stat.size === 0) { res.writeHead(200, { 'Content-Length': 0, 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' }); return res.end(); }
   const mimeTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.ico': 'image/x-icon', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.mp4': 'video/mp4', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.eot': 'application/vnd.ms-fontobject', '.pdf': 'application/pdf' };
   const extension = path.extname(target).toLowerCase();
+  if (mountPath && extension === '.html') {
+    const html = await fsp.readFile(target, 'utf8');
+    const withPaths = html.replace(/(\s(?:src|href|action)\s*=\s*['"])\/(?!\/)/gi, (_, attribute) => `${attribute}${mountPath}`);
+    const document = /<base\b/i.test(withPaths) ? withPaths : withPaths.replace(/<head\b[^>]*>/i, (head) => `${head}<base href="${mountPath}">`);
+    res.writeHead(200, { 'Content-Type': mimeTypes['.html'], 'Content-Length': Buffer.byteLength(document), 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
+    return res.end(req.method === 'HEAD' ? undefined : document);
+  }
   const canCompress = stat.size >= 1024 && /^(?:\.css|\.js|\.mjs|\.json|\.svg)$/.test(extension);
   const etag = `W/"${stat.size.toString(16)}-${Math.trunc(stat.mtimeMs).toString(16)}"`;
   const headers = { 'Content-Type': mimeTypes[extension] || 'application/octet-stream', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff', ETag: etag };
@@ -805,29 +788,62 @@ async function serveDemoStatic(req, res, deployment, pathname) {
   stream.pipe(res);
 }
 
-async function serveLocalDemo(req, res) {
-  if (!['GET', 'HEAD'].includes(req.method)) return json(res, 405, { error: 'Method not allowed.' });
-  const parsed = new URL(req.url, 'http://localhost');
-  const match = parsed.pathname.match(/^\/demo\/([a-z0-9-]+)(\/.*)?$/i);
-  if (!match) return json(res, 404, { error: 'Demo not found.' });
-  const project = store.projects.find((item) => item.demoSubdomain === match[1] && item.deployment?.status === 'running');
+function portfolioHostnames(req) {
+  const origin = publicOrigin(process.env.PUBLIC_ORIGIN);
+  const configuredHost = origin && new URL(origin).hostname;
+  return new Set(['localhost', '127.0.0.1', '[::1]', req.socket.localAddress?.replace(/^::ffff:/, ''), configuredHost]);
+}
+
+function forwardedTunnelHostname(req, hostname) {
+  const remote = req.socket.remoteAddress?.replace(/^::ffff:/, '');
+  if (remote !== '::1' && remote !== '127.0.0.1') return hostname;
+  const forwarded = String(req.headers['x-forwarded-host'] || '').toLowerCase();
+  return demoTunnelHostname(forwarded, DEMO_PORT) ? forwarded : hostname;
+}
+
+async function serveTunnelDemo(req, res, pathname, search) {
+  const match = /^\/demo\/([a-z0-9-]+)(\/.*)?$/.exec(pathname);
+  const mountPath = demoTunnelPath(match?.[1]);
+  const project = mountPath && store.projects.find(({ demoSubdomain, deployment }) => (demoSubdomain || deployment?.subdomain) === match[1]
+    && deployment?.status === 'running' && deployment.runtimeKind === 'static' && deployment.sourceDir);
   if (!project) return json(res, 404, { error: 'Demo not found.' });
-  const deployment = project.deployment;
-  if (deployment.runtimeKind === 'static') {
-    req.demoMountPrefix = `/demo/${encodeURIComponent(project.demoSubdomain)}/`;
-    return serveDemoStatic(req, res, deployment, match[2] || '/');
+  if (!['GET', 'HEAD'].includes(req.method)) return json(res, 405, { error: 'Method not allowed.' });
+  if (!match[2]) {
+    res.writeHead(308, { Location: mountPath + search });
+    return res.end();
   }
-  if (!deployment.localPort) return json(res, 503, { error: 'This demo is unavailable.' });
-  req.url = `${match[2] || '/'}${parsed.search}`;
-  return proxyRequest(req, res, deployment.localPort);
+  return serveDemoStatic(req, res, project.deployment, match[2], mountPath);
+}
+
+async function handleDemo(req, res) {
+  try {
+    const address = new URL(`http://${req.headers.host || 'localhost'}`);
+    const { pathname, search } = new URL(req.url, address);
+    const hostname = forwardedTunnelHostname(req, address.hostname.replace(/\.$/, ''));
+    if (portfolioHostnames(req).has(hostname)) return json(res, 404, { error: 'Demo not found.' });
+    if (pathname.startsWith('/demo/') && demoTunnelHostname(hostname, DEMO_PORT) === hostname) return await serveTunnelDemo(req, res, pathname, search);
+    const demo = deploymentForHost(hostname, store.projects, process.env.DEMO_BASE_DOMAIN || 'localhost', req.socket.localAddress);
+    if (!demo) return json(res, 404, { error: 'Demo not found.' });
+    return demo.runtimeKind === 'static' ? await serveDemoStatic(req, res, demo, pathname) : proxyRequest(req, res, demo.localPort);
+  } catch (error) {
+    console.error('Demo request failed:', error.message);
+    return res.headersSent ? res.destroy() : json(res, 500, { error: 'Could not load this demo.' });
+  }
 }
 
 async function handle(req, res) {
-  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  let address;
+  let parsedUrl;
+  try {
+    address = new URL(`http://${req.headers.host || 'localhost'}`);
+    parsedUrl = new URL(req.url, address);
+  } catch (_) { return json(res, 400, { error: 'Invalid URL.' }); }
   const pathname = parsedUrl.pathname;
   const method = req.method;
-  const hostedDemo = deploymentForHost(req.headers.host, store?.projects, process.env.DEMO_BASE_DOMAIN || 'localhost', req.socket.localAddress);
-  if (hostedDemo) return hostedDemo.runtimeKind === 'static' ? serveDemoStatic(req, res, hostedDemo, pathname) : proxyRequest(req, res, hostedDemo.localPort);
+  const reservedHosts = portfolioHostnames(req);
+  if (!reservedHosts.has(address.hostname.replace(/\.$/, '')) && isDemoHost(address.host, store.projects, process.env.DEMO_BASE_DOMAIN || 'localhost', req.socket.localAddress)) {
+    return json(res, 404, { error: 'Demo not found.' });
+  }
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
@@ -941,7 +957,7 @@ async function handle(req, res) {
         post.comments.push({ id: id(), author, body: comment, createdAt: new Date().toISOString() });
         await persist(); return json(res, 201, { comments: post.comments });
       }
-      if (process.env.NODE_ENV === 'production' && !pathname.startsWith('/api/')) return serveStatic(req, res, pathname);
+      if ((process.env.NODE_ENV === 'production' || process.env.PORTFOLIO_SERVE_BUILD === 'true') && !pathname.startsWith('/api/')) return serveStatic(req, res, parsedUrl);
       return json(res, 404, { error: 'Not found.' });
     }
     if (!requireAdmin(req, res)) return;
@@ -1041,15 +1057,17 @@ async function handle(req, res) {
         if (store.projects.some((item) => item.id !== project.id && item.demoSubdomain === project.demoSubdomain)) return json(res, 409, { error: 'This subdomain is already used by another project.' });
         const parsedDemoUrl = project.demoUrl ? new URL(project.demoUrl) : null;
         if (parsedDemoUrl && parsedDemoUrl.pathname !== '/' && parsedDemoUrl.pathname !== '') return json(res, 400, { error: 'A deployed project URL must use the root of its domain.' });
+        const manualHost = parsedDemoUrl?.hostname.replace(/\.$/, '') || '';
+        if (manualHost && (reservedHosts.has(manualHost) || manualHost === address.hostname.replace(/\.$/, ''))) return json(res, 400, { error: 'Use a separate hostname for the deployed project.' });
         project.deployment = { ...(project.deployment || {}), status: 'building', error: '' };
         project.demoEnabled = true;
         await persist();
         try {
           const runtime = await deployProject(project, project.containerPort || 3000);
           const baseDomain = (process.env.DEMO_BASE_DOMAIN || 'localhost').toLowerCase();
-          const manualHost = parsedDemoUrl && !['localhost', '127.0.0.1'].includes(parsedDemoUrl.hostname) ? parsedDemoUrl.hostname : '';
-          const localUrl = `${process.env.NODE_ENV === 'production' ? 'https' : 'http'}://${project.demoSubdomain}.${baseDomain}${baseDomain === 'localhost' ? `:${PORT}` : ''}`;
-          const publicUrl = process.env.NODE_ENV === 'production' && manualHost ? parsedDemoUrl.toString() : localUrl;
+          const localUrl = `http://${project.demoSubdomain}.localhost:${DEMO_PORT}`;
+          const configuredUrl = baseDomain === 'localhost' ? localUrl : `https://${project.demoSubdomain}.${baseDomain}`;
+          const publicUrl = parsedDemoUrl?.toString() || configuredUrl;
           project.deployment = { ...project.deployment, ...runtime, status: 'running', subdomain: project.demoSubdomain, customDomain: process.env.NODE_ENV === 'production' ? manualHost : '', localUrl, url: publicUrl, containerPort: project.containerPort || 3000, deployedAt: new Date().toISOString(), error: '' };
           await persist();
           return json(res, 200, { status: 'running', url: publicUrl, subdomain: project.demoSubdomain });
@@ -1218,12 +1236,18 @@ async function handle(req, res) {
   }
 }
 
+function listen(handler, port, address) {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer(handler);
+    server.once('error', reject);
+    server.listen(port, () => { console.log(`Listening on ${address}`); resolve(); });
+  });
+}
+
 init().then(() => {
-  const server = http.createServer((req, res) => { handle(req, res); });
-  server.listen(PORT, () => console.log(`Portfolio API listening on http://localhost:${PORT}`));
-  if (process.env.NODE_ENV !== 'production' || process.env.LOCAL_DEMOS_ENABLED === 'true') {
-    const demos = http.createServer((req, res) => { void serveLocalDemo(req, res).catch((error) => { if (!res.headersSent) json(res, 500, { error: 'Could not load this demo.' }); else res.destroy(); console.error('Local demo failed:', error.message); }); });
-    demos.listen(LOCAL_DEMO_PORT, () => console.log(`Local demos listening on http://localhost:${LOCAL_DEMO_PORT}`));
-    demos.on('error', (error) => console.error(`Local demo server could not start on port ${LOCAL_DEMO_PORT}:`, error.message));
-  }
+  if (PORT === DEMO_PORT) throw new Error('The portfolio and demos need separate ports.');
+  return Promise.all([
+    listen(handle, PORT, `http://localhost:${PORT}`),
+    listen(handleDemo, DEMO_PORT, `http://<demo>.localhost:${DEMO_PORT}`)
+  ]);
 }).catch((error) => { console.error('Could not start the portfolio server:', error); process.exit(1); });

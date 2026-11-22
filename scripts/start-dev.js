@@ -2,10 +2,10 @@ const { spawn } = require('node:child_process');
 const http = require('node:http');
 const net = require('node:net');
 const path = require('node:path');
+const expectedApiVersion = require('../src/lib/apiVersion');
 
 const root = path.resolve(__dirname, '..');
 const apiPort = 5000;
-const expectedApiVersion = 24;
 const uiPort = Number(process.env.UI_PORT || 3000);
 let ownedApi = null;
 let ui = null;
@@ -61,7 +61,7 @@ async function main() {
   } else {
     ownedApi = spawn(process.execPath, [path.join(root, 'server', 'index.js')], {
       cwd: root,
-      env: { ...process.env, PORT: String(apiPort), NODE_ENV: 'development' },
+      env: { ...process.env, PORT: String(apiPort), NODE_ENV: 'development', PORTFOLIO_SERVE_BUILD: 'true' },
       stdio: 'inherit'
     });
     ownedApi.on('exit', (code) => {

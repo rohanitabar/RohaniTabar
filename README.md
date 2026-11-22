@@ -58,33 +58,36 @@ Feature code lives together with its styles and focused tests. Shared UI pieces 
    npm install
    ```
 
-2. Copy `.env.example` to `.env` and set `ADMIN_SETUP_KEY` to a long, private value. The example configures `LIBRETRANSLATE_URL` to the local service; no translation provider credential is needed. Keep `.env` out of source control.
+2. Copy `.env.example` to `.env` and set `ADMIN_SETUP_KEY` to a long, private value. Leave `LIBRETRANSLATE_URL` unset to use the local Compose service. Keep `.env` out of source control.
 
 3. Start the local translation service (the first run downloads the Persian and English translation models):
 
    ```bash
-   docker compose up -d
+   docker compose up -d libretranslate
    ```
 
-   The models are stored in a Docker volume and reused after restarts. The service listens only on your computer at `127.0.0.1:5001`.
+   The models are stored in a Docker volume and reused after restarts. LibreTranslate accepts requests inside its container. The Node server reaches it through Docker Compose without publishing a host port.
 
    Stop the service with `docker compose down`. This keeps the downloaded models; `docker compose down -v` also removes them.
 
-4. Start the API and React development server together:
+4. Build and start the site and API:
 
    ```bash
+   npm run build
    npm start
    ```
 
-5. Open `http://localhost:3000/admin` directly. The site checks the session cookie: an already signed-in device opens the admin panel, while other devices see the login form. On first visit, enter the setup key and create your own username and password. The password must be at least 12 characters. On later visits, sign in with that account; the setup key is not needed again. There is no public admin button in the site header.
+5. Open `http://localhost:5000/admin` directly. The site checks the session cookie: an already signed-in device opens the admin panel, while other devices see the login form. On first visit, enter the setup key and create your own username and password. The password must be at least 12 characters. On later visits, sign in with that account; the setup key is not needed again. There is no public admin button in the site header.
 
-`npm start` starts the API on port 5000 and the React site on port 3000. The API must be running for admin changes to save. To run them separately, use `npm run start:api` and `npm run start:ui` in two terminals. The React development server forwards `/api` requests to port 5000.
+`npm start` opens the React development site with hot reload on port 3000, starts the API on port 5000, and serves demos on port 5001. Port 5000 also serves the production build when one is available. The development site forwards `/api` requests to port 5000. `npm run dev` is an alias for `npm start`. You can also run `npm run start:api` and `npm run start:ui` in separate terminals.
 
-To open local demos from a phone, connect it to the same network and open the site at `http://<computer-LAN-IP>:3000`. Active demos open on the isolated local preview server at port 5002. Allow ports 3000 and 5002 through the computer's firewall. For VS Code Dev Tunnels, forward both 3000 (website) and 5002 (demos) using the HTTP protocol. Open the forwarded website address on your phone. Running demos use the forwarded 5002 address automatically. For a public deployment, configure a real wildcard demo domain through `DEMO_BASE_DOMAIN`; `localhost` links are only for local development.
+On your computer, a demo opens at `http://<demo>.localhost:5001`. On your phone, connect to the same network and open `http://<computer-LAN-IP>:5000`. Demo links use `<demo>.<computer-LAN-IP>.nip.io:5001` and require the phone to resolve that hostname. Allow TCP ports 5000 and 5001 through the firewall.
+
+For VS Code Dev Tunnels, forward the website on port 5000 and the demos on port 5001 using HTTP. When opened through the website tunnel, active static demos link automatically to `/demo/<slug>/` on the paired port 5001 tunnel. Use relative asset URLs in tunnel previews. Dynamic demos and production deployments use separate demo hostnames. Set `DEMO_BASE_DOMAIN` to a wildcard-ready domain such as `demo.example.com` and route `*.demo.example.com` over HTTPS to the demo listener on port 5001. Preserve the incoming host header. Route the portfolio domain to port 5000 and set it as `PUBLIC_ORIGIN`.
 
 If an older site or API is already running, stop its terminal with Ctrl+C before running `npm start` again. Restarting the API signs out existing admin sessions; sign in again with your existing username and password.
 
-The React Developer Tools warning about a development build is expected with `npm start`. To preview the production build locally, run `npm run build` followed by `npm run preview`, then open `http://localhost:5000`.
+The React Developer Tools warning is expected on port 3000. `npm run preview` serves the production build and API on port 5000 and demos on port 5001.
 
 ## Local project demos
 
@@ -100,7 +103,7 @@ Set `PUBLIC_ORIGIN` to the exact HTTPS origin in production. The API checks brow
 
 ### Technical SEO
 
-The production Node server adds route-specific titles, descriptions, canonical URLs, Open Graph and Twitter metadata to the HTML response. Published articles also include `BlogPosting` structured data and poster metadata. `/sitemap.xml` lists public pages and published articles; `/robots.txt` points to it and allows public browsing for ordinary crawlers, `OAI-SearchBot` and `ChatGPT-User` while excluding admin and API paths. Drafts and unknown article URLs return 404 and `noindex`; the admin page is also `noindex`. Set `PUBLIC_ORIGIN=https://your-domain.example` before deployment so canonical and sitemap URLs use the real domain. The React app remains client rendered, so a search engine must run JavaScript to index the full article text; metadata and structured data are available in the initial HTML.
+The production Node server adds route-specific titles, descriptions, canonical URLs, Open Graph and Twitter metadata to the HTML response. Published articles also include `BlogPosting` structured data and poster metadata. `/sitemap.xml` lists public pages and published articles; `/robots.txt` points to it and allows public browsing for ordinary crawlers, `OAI-SearchBot` and `ChatGPT-User` while excluding admin and API paths. Drafts and unknown article URLs return 404 and `noindex`; the admin page is also `noindex`. Set `PUBLIC_ORIGIN=https://your-domain.example` before deployment so canonical and sitemap URLs use the real domain. The blog archive, published articles, projects and directly linked portfolio sections include their content in the first HTML response. Deploy the complete `build` folder, including the private `build/.server` renderer, for the production Node server.
 
 Build the React app and start the Node server:
 
@@ -109,7 +112,7 @@ npm run build
 npm run preview
 ```
 
-Start the local LibreTranslate service on the production host with `docker compose up -d` before publishing posts or projects. It downloads models on first startup and then translates locally. The app can still save Persian content if the service is stopped; that content is marked for translation retry.
+Start the private LibreTranslate service on the production host with `docker compose up -d libretranslate` before publishing posts or projects. It downloads models on first startup and then translates locally. The app can still save Persian content if the service is stopped, and that content is marked for translation retry.
 
 Set `PUBLIC_ORIGIN` to the public origin (for example, `https://example.com`) and terminate HTTPS at a trusted reverse proxy. Use a fresh, high-entropy `ADMIN_SETUP_KEY` before the first deployment. After the first admin account is created, setup remains closed; keep the setup key private and rotate or remove it from the environment.
 
@@ -135,11 +138,12 @@ VAPID keys and subscriptions are stored in `server/data`. Keep this directory pr
 
 ## Data and deployment notes
 
-The API is intentionally small and uses Node's built-in HTTP, crypto and filesystem modules. It keeps content in a local JSON file and sessions in memory. This works for a single server instance with persistent disk. For multi-instance or serverless hosting, replace those stores with a shared database and session store, and use private object storage for PDF files. In production, run LibreTranslate on the same host and keep it bound to loopback; if Node runs in a container on the same Compose network, set `LIBRETRANSLATE_URL=http://libretranslate:5000/translate`. Put the site behind HTTPS in production and do not expose the setup key.
+The API is intentionally small and uses Node's built-in HTTP, crypto and filesystem modules. It keeps content in a local JSON file and sessions in memory. This works for a single server instance with persistent disk. For multi-instance or serverless hosting, replace those stores with a shared database and session store, and use private object storage for PDF files. When Node can reach LibreTranslate on a private Compose network, use `LIBRETRANSLATE_URL=http://libretranslate:5000/translate`. Put the site behind HTTPS in production and do not expose the setup key.
 
 ## Scripts
 
-- `npm start` — API and React development server together
+- `npm start` — React development server on 3000, API on 5000, and demos on 5001
+- `npm run dev` — alias for `npm start`
 - `npm run start:ui` — React development server only
 - `npm run start:api` — portfolio API
 - `npm run build` — production React build

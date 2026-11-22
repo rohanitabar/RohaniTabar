@@ -2,9 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs/promises');
+const http = require('node:http');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
+const { gunzipSync } = require('node:zlib');
 const { deploymentForHost } = require('../server/deployments');
 const { renderHtml, sitemapXml } = require('../server/seo');
 
@@ -59,6 +61,24 @@ test('home HTML can paint the correct portrait and theme before React starts', (
   assert.match(featured, /rel="preload" as="image" href="\/uploads\/cover\.optimized\.webp"/);
 });
 
+test('large public data keeps the requested story and uses summaries for other posts', () => {
+  const template = '<html><head><title>Portfolio</title></head><body><div id="root"></div></body></html>';
+  const current = { id: 'current', published: true, title: 'Current story', body: 'Full article', comments: [] };
+  const other = { id: 'other', published: true, title: 'Other story', body: 'x'.repeat(200000), comments: [{ body: 'Comment' }] };
+  const posts = [current, other];
+  const page = renderHtml(template, '/blog/current', posts, '', { posts, skills: [], projects: [] }, {}, '', {
+    location: '/blog/current',
+    renderer({ publicData }) {
+      assert.equal(publicData.posts[0].body, 'Full article');
+      assert.equal(publicData.posts[1].body, undefined);
+      assert.equal(publicData.posts[1].commentCount, 1);
+      return '<h1>Current story</h1>';
+    }
+  });
+  assert.match(page.html, /data-rendered="true"><h1>Current story<\/h1>/);
+  assert.match(page.html, /id="site-bootstrap" type="application\/json" data-partial="true"/);
+});
+
 test('routes a LAN demo hostname only to the matching local address', () => {
   const deployment = { status: 'running', runtimeKind: 'static', sourceDir: 'demo' };
   const projects = [{ demoSubdomain: 'musicplayer', deployment }];
@@ -66,17 +86,26 @@ test('routes a LAN demo hostname only to the matching local address', () => {
   assert.equal(deploymentForHost('musicplayer.192.168.1.21.nip.io:5000', projects, 'localhost', '192.168.1.20'), null);
 });
 
-test('serves a project demo on the isolated local preview origin', async (t) => {
+async function getWithHost(url, headers) {
+  const response = await new Promise((resolve, reject) => http.get(url, { headers }, resolve).once('error', reject));
+  const chunks = [];
+  for await (const chunk of response) chunks.push(chunk);
+  const body = Buffer.concat(chunks);
+  const content = response.headers['content-encoding'] === 'gzip' ? gunzipSync(body) : body;
+  return { status: response.statusCode, headers: response.headers, body: content.toString() };
+}
+
+test('serves demos on a dedicated port and keeps the API on the site port', async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'portfolio-demo-test-'));
   const sourceDir = path.join(dataDir, 'source');
   await fs.mkdir(sourceDir, { recursive: true });
   await fs.writeFile(path.join(sourceDir, 'index.html'), '<html><head></head><body><script src="/assets/app.js"></script></body></html>');
+  await fs.writeFile(path.join(sourceDir, '.env'), 'FIXTURE_ONLY=secret');
   const script = 'console.log(123);\n'.repeat(200);
   await fs.mkdir(path.join(sourceDir, 'assets'));
   await fs.writeFile(path.join(sourceDir, 'assets', 'app.js'), script);
   const port = await freePort();
-  let demoPort = await freePort();
-  while (demoPort === port) demoPort = await freePort();
+  const demoPort = await freePort();
   await fs.writeFile(path.join(dataDir, 'site.json'), JSON.stringify({
     admin: null, skills: [], posts: [], socials: [], resume: null, ads: [], messages: [], notices: [], career: { noExperience: false, companies: [] },
     projects: [{ id: 'demo1', demoSubdomain: 'musicplayer', projectType: 'static', deployment: { status: 'running', runtimeKind: 'static', sourceDir } }]
@@ -90,26 +119,46 @@ test('serves a project demo on the isolated local preview origin', async (t) => 
     if (server.exitCode === null) { const closed = new Promise((resolve) => server.once('exit', resolve)); server.kill(); await closed; }
     await fs.rm(dataDir, { recursive: true, force: true });
   });
+  const origin = `http://127.0.0.1:${port}`;
+  const demoOrigin = `http://127.0.0.1:${demoPort}`;
+  const demoHeaders = { Host: `musicplayer.localhost:${demoPort}` };
+  const tunnelHeaders = { Host: `sample-id-${demoPort}.eun1.devtunnels.ms` };
+  const tunnelPath = '/demo/musicplayer/';
   let ready = false;
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    try { if ((await fetch(`http://127.0.0.1:${demoPort}/demo/musicplayer/`)).ok) { ready = true; break; } } catch (_) { /* Wait for startup. */ }
+    try { if ((await fetch(`${origin}/api/health`)).ok) { ready = true; break; } } catch (_) { /* Wait for startup. */ }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  assert.ok(ready, 'demo preview server started');
-  const response = await fetch(`http://127.0.0.1:${demoPort}/demo/musicplayer/`);
-  const html = await response.text();
-  assert.match(html, /<base href="\/demo\/musicplayer\/">/);
-  assert.match(html.toLowerCase(), /src="\/demo\/musicplayer\/assets\/app\.js"/);
-  const asset = `http://127.0.0.1:${demoPort}/demo/musicplayer/assets/app.js`;
-  const compressed = await fetch(asset, { headers: { 'Accept-Encoding': 'gzip' } });
-  assert.equal(compressed.headers.get('content-encoding'), 'gzip');
-  assert.equal(await compressed.text(), script);
-  const cached = await fetch(asset, { headers: { 'If-None-Match': compressed.headers.get('etag') } });
+  assert.ok(ready, 'portfolio server started');
+  const response = await getWithHost(`${demoOrigin}/`, demoHeaders);
+  assert.equal(response.status, 200);
+  assert.match(response.body, /src="\/assets\/app\.js"/);
+  assert.equal((await fetch(`${origin}/demo/musicplayer/`)).status, 404);
+  assert.equal((await getWithHost(`${origin}/`, { Host: `musicplayer.localhost:${port}` })).status, 404);
+  assert.equal((await getWithHost(`${demoOrigin}/api/health`, demoHeaders)).status, 404);
+  assert.equal((await fetch(`${demoOrigin}/api/health`)).status, 404);
+  assert.equal((await getWithHost(`${demoOrigin}/`, { Host: `missing.localhost:${demoPort}` })).status, 404);
+  assert.equal((await getWithHost(`${demoOrigin}/demo/musicplayer`, tunnelHeaders)).headers.location, tunnelPath);
+  const tunneledPage = await getWithHost(`${demoOrigin}${tunnelPath}`, tunnelHeaders);
+  assert.equal(tunneledPage.status, 200);
+  assert.match(tunneledPage.body, /<base href="\/demo\/musicplayer\/">/);
+  assert.match(tunneledPage.body, /src="\/demo\/musicplayer\/assets\/app\.js"/);
+  assert.equal((await getWithHost(`${demoOrigin}${tunnelPath}`, { 'X-Forwarded-Host': tunnelHeaders.Host })).status, 200);
+  assert.equal((await getWithHost(`${demoOrigin}${tunnelPath}.env`, tunnelHeaders)).status, 404);
+  assert.equal((await getWithHost(`${origin}${tunnelPath}`, tunnelHeaders)).status, 404);
+  assert.equal((await getWithHost(`${demoOrigin}${tunnelPath}assets/app.js`, tunnelHeaders)).body, script);
+  const { projects } = await (await fetch(`${origin}/api/site-data`)).json();
+  assert.equal(projects[0].deployment.localPreviewPort, demoPort);
+  const asset = `${demoOrigin}/assets/app.js`;
+  const compressed = await getWithHost(asset, { ...demoHeaders, 'Accept-Encoding': 'gzip' });
+  assert.equal(compressed.headers['content-encoding'], 'gzip');
+  assert.equal(compressed.body, script);
+  const cached = await getWithHost(asset, { ...demoHeaders, 'If-None-Match': compressed.headers.etag });
   assert.equal(cached.status, 304);
-  const partial = await fetch(asset, { headers: { Range: 'bytes=0-15', 'Accept-Encoding': 'gzip' } });
+  const partial = await getWithHost(asset, { ...demoHeaders, Range: 'bytes=0-15', 'Accept-Encoding': 'gzip' });
   assert.equal(partial.status, 206);
-  assert.equal(partial.headers.get('content-encoding'), null);
-  assert.equal(await partial.text(), script.slice(0, 16));
+  assert.equal(partial.headers['content-encoding'], undefined);
+  assert.equal(partial.body, script.slice(0, 16));
 });
 
 async function freePort() {
@@ -123,10 +172,11 @@ async function freePort() {
 test('production API applies origin, compression and static security rules', async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'portfolio-api-test-'));
   const port = await freePort();
+  const demoPort = await freePort();
   const origin = `http://127.0.0.1:${port}`;
   const server = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], {
     cwd: path.join(__dirname, '..'),
-    env: { ...process.env, PORT: String(port), NODE_ENV: 'production', PUBLIC_ORIGIN: origin, PORTFOLIO_DATA_DIR: dataDir, PORTFOLIO_UPLOAD_DIR: path.join(dataDir, 'uploads') },
+    env: { ...process.env, PORT: String(port), LOCAL_DEMO_PORT: String(demoPort), NODE_ENV: 'production', PUBLIC_ORIGIN: origin, PORTFOLIO_DATA_DIR: dataDir, PORTFOLIO_UPLOAD_DIR: path.join(dataDir, 'uploads') },
     stdio: 'ignore'
   });
   t.after(async () => {
@@ -166,9 +216,13 @@ test('production API applies origin, compression and static security rules', asy
   assert.equal(page.status, 200);
   assert.match(page.headers.get('content-security-policy'), /script-src 'self'/);
   assert.equal(page.headers.get('x-frame-options'), 'DENY');
-  const article = await fetch(`${origin}/blog/${encodeURIComponent(siteData.posts[0].slug)}`);
+  const article = await fetch(`${origin}/blog/${encodeURIComponent(siteData.posts[0].slug)}`, { headers: { Cookie: 'portfolio-language=en; portfolio-theme=dark' } });
   assert.equal(article.status, 200);
-  assert.match(await article.text(), /property="og:type" content="article"/);
+  const articleHtml = await article.text();
+  assert.match(articleHtml, /property="og:type" content="article"/);
+  assert.match(articleHtml, /<html lang="en" dir="ltr" data-theme="dark">/);
+  assert.match(articleHtml, /data-rendered="true"[\s\S]*<h1>[\s\S]*<footer class="site-footer"/);
+  assert.match(article.headers.get('vary'), /Cookie/);
   assert.match(article.headers.get('content-security-policy'), /sha256-/);
   const admin = await fetch(`${origin}/admin`);
   assert.equal(admin.headers.get('x-robots-tag'), 'noindex, nofollow');
@@ -176,6 +230,10 @@ test('production API applies origin, compression and static security rules', asy
   assert.equal(missing.status, 404);
   const missingAsset = await fetch(`${origin}/static/js/does-not-exist.js`);
   assert.equal(missingAsset.status, 404);
+  const serverBundle = await fetch(`${origin}/%2Eserver/render.cjs`);
+  assert.equal(serverBundle.status, 404);
+  const contact = await fetch(`${origin}/contact`);
+  assert.match(await contact.text(), /data-rendered="true"[\s\S]*id="contact"[\s\S]*getElementById\("contact"\)\?\.scrollIntoView/);
   const sitemap = await fetch(`${origin}/sitemap.xml`);
   assert.equal(sitemap.status, 200);
   assert.match(await sitemap.text(), new RegExp(siteData.posts[0].slug));

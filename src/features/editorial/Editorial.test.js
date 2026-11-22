@@ -1,20 +1,64 @@
-import { act, render } from '@testing-library/react';
-import { ProjectCard, TimedAd, resolveProjectDemoUrl } from './Editorial';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
+import { AdCard, ArticlePage, ProjectCard, resolveProjectDemoUrl } from './Editorial';
 
-test('uses the isolated local demo port on desktop and LAN devices', () => {
-  const project = { demoSubdomain: 'musicplayer', deployment: { status: 'running', url: 'http://musicplayer.localhost:5000', localPreviewPath: '/demo/musicplayer/', localPreviewPort: 5001 } };
-  expect(resolveProjectDemoUrl(project, '192.168.1.20')).toBe('http://192.168.1.20:5001/demo/musicplayer/');
-  expect(resolveProjectDemoUrl(project, 'localhost')).toBe('http://localhost:5001/demo/musicplayer/');
-  expect(resolveProjectDemoUrl({ ...project, deployment: { ...project.deployment, url: '' } }, '192.168.1.20')).toBe('http://192.168.1.20:5001/demo/musicplayer/');
+test('updates the article directly from successful like and comment responses', async () => {
+  const originalFetch = global.fetch;
+  const comments = [{ id: 'comment-1', author: 'Reader', body: 'Helpful article' }];
+  global.fetch = jest.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ likes: 3, liked: true }) })
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ comments }) });
+
+  try {
+    const post = { id: 'story-1', title: 'Story', body: 'Article body', likes: 2, comments: [] };
+    const onPostUpdated = jest.fn();
+    const t = { like: 'Like', share: 'Share', comments: 'Comments', name: 'Name', commentPlaceholder: 'Comment', send: 'Send comment' };
+    render(<MemoryRouter>
+      <ArticlePage post={post} posts={[post]} lang="en" t={t} notify={jest.fn()} onPostUpdated={onPostUpdated} />
+    </MemoryRouter>);
+
+    fireEvent.click(screen.getByRole('button', { name: /Like/ }));
+    await waitFor(() => expect(onPostUpdated).toHaveBeenCalledWith(post.id, { likes: 3 }));
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), { target: { value: ' Reader ' } });
+    const draft = screen.getByRole('textbox', { name: 'Comment' });
+    fireEvent.change(draft, { target: { value: ' Helpful article ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send comment' }));
+    await waitFor(() => expect(onPostUpdated).toHaveBeenCalledWith(post.id, { comments }));
+
+    expect(global.fetch.mock.calls.map(([url]) => url)).toEqual(['/api/posts/story-1/like', '/api/posts/story-1/comments']);
+    expect(global.fetch.mock.calls[1][1].body).toEqual(JSON.stringify({ author: 'Reader', body: 'Helpful article' }));
+    expect(draft).toHaveValue('');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('links local and LAN demos to their own hostnames on the service port', () => {
+  const project = { demoSubdomain: 'musicplayer', deployment: { status: 'running', url: 'http://musicplayer.localhost:5000', localPreviewPort: 5000 } };
+  expect(resolveProjectDemoUrl(project, '192.168.1.20')).toBe('http://musicplayer.192.168.1.20.nip.io:5000/');
+  expect(resolveProjectDemoUrl(project, 'localhost')).toBe('http://musicplayer.localhost:5000/');
+  expect(resolveProjectDemoUrl(project, '127.0.0.1')).toBe('http://musicplayer.localhost:5000/');
+  expect(resolveProjectDemoUrl(project, '192.168.1.20', 'https:')).toBe('https://musicplayer.192.168.1.20.nip.io:5000/');
+  expect(resolveProjectDemoUrl({ deployment: { status: 'running', subdomain: 'musicplayer', localPreviewPort: 5100 } }, '10.0.0.1')).toBe('http://musicplayer.10.0.0.1.nip.io:5100/');
   expect(resolveProjectDemoUrl(project, 'portfolio.example')).toBe('');
 });
 
-test('links running demos to their own forwarded port on a VS Code tunnel', () => {
-  const project = { deployment: { status: 'running', url: 'http://musicplayer.localhost:5000', localPreviewPath: '/demo/musicplayer/', localPreviewPort: 5002 } };
-  expect(resolveProjectDemoUrl(project, 'sample-id-3000.eun1.devtunnels.ms')).toBe('https://sample-id-5002.eun1.devtunnels.ms/demo/musicplayer/');
-  expect(resolveProjectDemoUrl(project, 'sample-id-3000.devtunnels.ms')).toBe('https://sample-id-5002.devtunnels.ms/demo/musicplayer/');
-  expect(resolveProjectDemoUrl(project, 'sample-id-3000.devtunnels.ms.example.org')).toBe('');
-  expect(resolveProjectDemoUrl({ ...project, demoUrl: 'https://demos.example.org/music' }, 'sample-id-3000.eun1.devtunnels.ms')).toBe('https://demos.example.org/music');
+test('uses a configured external demo origin when accessed through a tunnel or public hostname', () => {
+  const tunnel = 'sample-id-5000.eun1.devtunnels.ms';
+  const project = { deployment: { status: 'running', subdomain: 'musicplayer', url: 'http://musicplayer.localhost:5000', localPreviewPort: 5000 } };
+  expect(resolveProjectDemoUrl(project, tunnel)).toBe('');
+  expect(resolveProjectDemoUrl({ ...project, demoUrl: `https://${tunnel}/demo/musicplayer/` }, tunnel)).toBe('');
+  expect(resolveProjectDemoUrl({ ...project, demoUrl: 'https://demos.example.org/music' }, tunnel)).toBe('https://demos.example.org/music');
+  expect(resolveProjectDemoUrl({ deployment: { ...project.deployment, url: 'https://musicplayer.demo.example.org/' } }, 'portfolio.example.org')).toBe('https://musicplayer.demo.example.org/');
+});
+
+test('opens active static demos through the paired 5001 tunnel on mobile', () => {
+  const project = { projectType: 'static', deployment: { status: 'running', subdomain: 'musicplayer', localPreviewPort: 5001 } };
+  expect(resolveProjectDemoUrl(project, 'sample-id-5000.eun1.devtunnels.ms')).toBe('https://sample-id-5001.eun1.devtunnels.ms/demo/musicplayer/');
+  expect(resolveProjectDemoUrl(project, 'sample-id-3000.eun1.devtunnels.ms')).toBe('https://sample-id-5001.eun1.devtunnels.ms/demo/musicplayer/');
+  expect(resolveProjectDemoUrl(project, 'sample-id-5000.eun1.devtunnels.ms.example.org')).toBe('');
+  expect(resolveProjectDemoUrl({ ...project, projectType: 'dynamic' }, 'sample-id-5000.eun1.devtunnels.ms')).toBe('');
 });
 
 test('uses the optimized cover and prioritizes the first visible project', () => {
@@ -27,29 +71,14 @@ test('uses the optimized cover and prioritizes the first visible project', () =>
   expect(container.querySelector('.project-cover')).toHaveAttribute('loading', 'eager');
 });
 
-test('starts fetching the ad image shortly after the slot approaches the viewport', () => {
-  const originalObserver = window.IntersectionObserver;
-  let intersect;
-  const disconnect = jest.fn();
-  window.IntersectionObserver = jest.fn((callback) => {
-    intersect = callback;
-    return { observe: jest.fn(), disconnect };
-  });
-  jest.useFakeTimers();
-  try {
-    const ad = { href: 'https://example.org', imageUrl: '/uploads/ad-image-test.png' };
-    const { container, unmount } = render(<TimedAd ad={ad} lang="en" />);
-    expect(container.querySelector('img')).toBeNull();
-    expect(window.IntersectionObserver.mock.calls[0][1].rootMargin).toBe('480px 0px');
-    act(() => intersect([{ isIntersecting: true }]));
-    act(() => jest.advanceTimersByTime(120));
-    const image = container.querySelector('img');
-    expect(image).toHaveAttribute('src', ad.imageUrl);
-    expect(image).toHaveAttribute('loading', 'eager');
-    expect(disconnect).toHaveBeenCalled();
-    unmount();
-  } finally {
-    jest.useRealTimers();
-    window.IntersectionObserver = originalObserver;
-  }
+test('reserves the advertisement image area immediately and lets the browser schedule the download', () => {
+  const ad = { href: 'https://example.org', imageUrl: '/uploads/ad-image-test.png', altEn: 'Sponsor', captionEn: 'Read more' };
+  const { getByRole, getByText } = render(<AdCard ad={ad} lang="en" />);
+  const image = getByRole('img', { name: 'Sponsor' });
+  expect(image).toHaveAttribute('src', ad.imageUrl);
+  expect(image).toHaveAttribute('loading', 'lazy');
+  expect(image).toHaveAttribute('width', '400');
+  expect(image).toHaveAttribute('height', '300');
+  expect(getByRole('link', { name: 'Sponsor' })).toHaveAttribute('href', ad.href);
+  expect(getByText('Read more')).toBeInTheDocument();
 });

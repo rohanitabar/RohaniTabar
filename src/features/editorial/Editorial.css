@@ -33,7 +33,7 @@
 .sidebar-box small{display:block;color:var(--muted);font-size:10px;font-weight:400}
 .article-page{min-width:0}
 .article-back{display:inline-block;color:var(--muted);font-size:12px;font-weight:700;margin-bottom:24px}
-.article-cover{display:block;width:min(100%,900px);aspect-ratio:1200/627;object-fit:cover;border-radius:18px;margin:40px 0 48px}
+.article-cover{display:block;width:min(100%,900px);height:auto;aspect-ratio:1200/627;object-fit:cover;border-radius:18px;margin:40px 0 48px}
 .article-content{font-size:16px;line-height:2;color:var(--ink);overflow-wrap:anywhere}
 .article-content p{white-space:pre-line;margin:0 0 22px}
 .article-content h2{font-size:clamp(22px,3vw,30px);line-height:1.5;margin:36px 0 14px}
@@ -78,17 +78,9 @@
 .admin-reply{display:flex;align-items:flex-start;gap:10px;margin-inline-start:25px;background:var(--surface-soft);border-radius:12px;padding:12px}
 .admin-reply img{width:38px;height:38px;object-fit:cover;border-radius:50%}
 .sidebar-ad-stack{display:grid;gap:14px}
-.sidebar-ad-stack .ad-flow-slot{width:100%;min-height:0}
-.sidebar-ad-stack .ad-flow-wait{min-height:180px}
 @media(max-width:700px){.sidebar-ad-stack{order:3;width:100%;display:grid;gap:14px}.sidebar-ad-stack .sidebar-ad{width:100%;margin:0}}
 .sidebar-ad-caption{display:block;padding:12px 14px;color:var(--ink);font-size:13px;font-weight:700;line-height:1.7;text-align:center}
 .sidebar-ad.has-image .sidebar-ad-caption{background:var(--surface);border-top:1px solid var(--line)}
 .magazine-main{display:grid;gap:30px}
 .ad-flow-slot,.ad-flow-reserve{grid-column:1/-1;width:100%;margin:0}
-.ad-flow-slot{min-height:150px;display:grid;place-items:center}
-.ad-flow-slot .sidebar-ad{width:100%}
-.ad-flow-wait{display:grid;place-items:center;width:100%;min-height:150px;border:1px dashed var(--line);border-radius:16px;background:var(--surface-soft);color:var(--muted);font-size:12px}
-.ad-flow-slot.is-ready{animation:ad-arrive .14s ease-out both}
-@media(prefers-reduced-motion:reduce){.ad-flow-slot.is-ready{animation:none}}
-@keyframes ad-arrive{from{opacity:.45;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .article-page>.ad-flow-slot,.article-page>.ad-flow-reserve{margin:24px 0}

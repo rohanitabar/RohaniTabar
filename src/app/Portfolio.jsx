@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import React, { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import AdaptiveLogo from '../components/ui/AdaptiveLogo';
 import PushToggle from '../features/notifications/PushNotifications';
@@ -8,7 +8,9 @@ const AdminPage = lazy(() => import('../features/admin/AdminPage'));
 import CareerTimeline from '../features/career/CareerTimeline';
 import RuntimeErrorBoundary from '../components/ui/RuntimeErrorBoundary';
 import { monitoredFetch, reportClientIssue } from '../lib/diagnostics';
+import { subscribeToSiteChanges } from '../lib/siteEvents';
 import { Hero } from './Hero';
+import { sectionPaths, sectionIdsByPath } from './portfolioSections';
 import portraitMobile from '../assets/images/Abbas-mobile.webp';
 import portraitDesktop from '../assets/images/Abbas-desktop.webp';
 import logo from '../assets/images/Logo.jpg';
@@ -44,16 +46,6 @@ const initialSocials = [
   { id: 'whatsapp', href: 'https://wa.me/989032991639', iconUrl: 'https://cdn.simpleicons.org/whatsapp/25D366' },
   { id: 'telegram', href: 'https://t.me/AbbasRt_1385', iconUrl: 'https://cdn.simpleicons.org/telegram/26A5E4' }
 ];
-const sectionPaths = {
-  about: '/about',
-  experience: '/experience',
-  skills: '/skills',
-  projects: '/featured-projects',
-  blog: '/latest-posts',
-  contact: '/contact'
-};
-const sectionIdsByPath = Object.fromEntries(Object.entries(sectionPaths).map(([id, path]) => [path, id]));
-
 async function api(url, options = {}) {
   const scope = url.includes('/career') ? 'experience' : url.includes('/projects') ? 'projects' : url.includes('/posts') ? 'posts' : url.includes('/skills') ? 'skills' : url.includes('/socials') ? 'socials' : 'api';
   const response = await monitoredFetch(url, { credentials: 'same-origin', ...options, headers: { ...(options.body && !(options.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}), ...options.headers } }, scope);
@@ -110,7 +102,7 @@ const writePreference = (key, value) => {
   try { window.localStorage.setItem(key, value); } catch (_) { /* Storage can be unavailable. */ }
   document.cookie = `${key}=${value}; Path=/; Max-Age=31536000; SameSite=Lax`;
 };
-const initialPublicData = (() => { try { const raw = document.getElementById('site-bootstrap')?.textContent; const data = raw && JSON.parse(raw); return data && Array.isArray(data.skills) && Array.isArray(data.projects) && Array.isArray(data.posts) ? data : null; } catch (_) { return null; } })();
+const fallbackPublicData = { skills: initialSkills, projects: initialProjects, posts: initialPosts, socials: initialSocials, resume: null, ads: [], messages: [], career: { noExperience: false, companies: [] } };
 const translatedError = (error, lang) => {
   const message = error?.message || '';
   if (lang !== 'fa') return message || 'The request could not be completed.';
@@ -144,25 +136,27 @@ const translatedError = (error, lang) => {
   return messages[message] || message || 'درخواست انجام نشد؛ اتصال سرور را بررسی کن.';
 };
 
-export default function Portfolio() {
+export default function Portfolio({ publicData, partialData, initialLanguage, initialTheme, hasHomePreview, hostname, protocol }) {
   const location = useLocation();
-  const [lang, setLang] = useState(() => readPreference('portfolio-language', ['fa', 'en'], document.documentElement.lang === 'en' ? 'en' : 'fa'));
-  const [theme, setTheme] = useState(() => readPreference('portfolio-theme', ['light', 'dark'], document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'));
-  const [data, setData] = useState(initialPublicData || { skills: initialSkills, projects: initialProjects, posts: initialPosts, socials: initialSocials, resume: null, ads: [], messages: [], career: { noExperience: false, companies: [] } });
-  const [initialLoading, setInitialLoading] = useState(() => !initialPublicData && !document.querySelector('#root > .site-shell #home'));
+  const pathname = location.pathname.replace(/\/$/, '') || '/';
+  const [lang, setLang] = useState(() => initialLanguage ?? readPreference('portfolio-language', ['fa', 'en'], document.documentElement.lang === 'en' ? 'en' : 'fa'));
+  const [theme, setTheme] = useState(() => initialTheme ?? readPreference('portfolio-theme', ['light', 'dark'], document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'));
+  const [data, setData] = useState(() => publicData || fallbackPublicData);
+  const [initialLoading, setInitialLoading] = useState(() => !publicData && !hasHomePreview);
   const [notice, setNotice] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [headerHidden, setHeaderHidden] = useState(false);
   const [unresolvedNoticeCount, setUnresolvedNoticeCount] = useState(0);
-  const [belowFoldReady, setBelowFoldReady] = useState(false);
+  const [belowFoldReady, setBelowFoldReady] = useState(() => pathname !== '/');
   const latestDataRequest = useRef(0);
+  const postChangesDuringRefresh = useRef(null);
   const refreshRetry = useRef(null);
   const needsRetry = useRef(false);
   const retryDelay = useRef(3000);
   const t = copy[lang];
-  const pathname = location.pathname.replace(/\/$/, '') || '/';
   useEffect(() => {
+    if (pathname !== '/' || belowFoldReady) return undefined;
     // Let the browser paint the hero before mounting the rest of the homepage.
     let nextFrame;
     const frame = requestAnimationFrame(() => {
@@ -172,24 +166,28 @@ export default function Portfolio() {
       cancelAnimationFrame(frame);
       if (nextFrame !== undefined) cancelAnimationFrame(nextFrame);
     };
-  }, []);
+  }, [pathname, belowFoldReady]);
   const isAdmin = pathname === '/admin';
   const isBlog = pathname === '/blog';
   const isProjects = pathname === '/projects';
   const articleId = pathname.startsWith('/blog/') ? pathname.slice('/blog/'.length) : null;
-  const latestPosts = newestFirst(data.posts.filter((post) => post.published !== false));
-  const latestProjects = data.projects.filter((project) => project.featured !== false);
+  const isPortfolio = !isAdmin && !isBlog && !isProjects && !articleId;
+  const latestPosts = useMemo(() => isPortfolio ? newestFirst(data.posts.filter((post) => post.published !== false)).slice(0, 5) : [], [data.posts, isPortfolio]);
+  const latestProjects = useMemo(() => isPortfolio ? data.projects.filter((project) => project.featured !== false).slice(0, 5) : [], [data.projects, isPortfolio]);
   const refresh = useCallback(async () => {
     const requestId = ++latestDataRequest.current;
+    const updatedPosts = new Map();
+    postChangesDuringRefresh.current = updatedPosts;
     try {
-      const next = await api('/api/site-data', { signal: AbortSignal.timeout?.(12000) });
+      const next = await api('/api/site-data', { timeoutMs: 12000 });
       // StrictMode and admin actions can trigger overlapping refreshes. Ignore an
       // older response so it cannot replace a newer career setting on screen.
       if (requestId !== latestDataRequest.current) return;
       needsRetry.current = false;
       retryDelay.current = 3000;
       window.clearTimeout(refreshRetry.current);
-      setData({ ...next, skills: next.skills || initialSkills, projects: next.projects || initialProjects, posts: next.posts || initialPosts, socials: next.socials || initialSocials, ads: next.ads || [], career: next.career || { noExperience: false, companies: [] } });
+      const posts = next.posts || initialPosts;
+      setData({ ...next, skills: next.skills || initialSkills, projects: next.projects || initialProjects, posts: updatedPosts.size ? posts.map((post) => updatedPosts.has(post.id) ? { ...post, ...updatedPosts.get(post.id) } : post) : posts, socials: next.socials || initialSocials, ads: next.ads || [], career: next.career || { noExperience: false, companies: [] } });
     } catch {
       if (requestId === latestDataRequest.current) {
         needsRetry.current = true;
@@ -198,14 +196,29 @@ export default function Portfolio() {
         retryDelay.current = Math.min(retryDelay.current * 2, 30000);
       }
     }
-    finally { if (requestId === latestDataRequest.current) setInitialLoading(false); }
+    finally {
+      if (postChangesDuringRefresh.current === updatedPosts) postChangesDuringRefresh.current = null;
+      if (requestId === latestDataRequest.current) setInitialLoading(false);
+    }
   }, []);
   const updateCareer = useCallback((career) => {
     // A successful save is newer than any site-data request already in flight.
     latestDataRequest.current += 1;
     setData((current) => ({ ...current, career }));
   }, []);
-  useEffect(() => { if (!initialPublicData) void refresh(); }, [refresh]);
+  const updatePost = useCallback((id, changes) => {
+    const pending = postChangesDuringRefresh.current;
+    if (pending) pending.set(id, { ...pending.get(id), ...changes });
+    setData((current) => ({ ...current, posts: current.posts.map((post) => post.id === id ? { ...post, ...changes } : post) }));
+  }, []);
+  useEffect(() => { if (!publicData) void refresh(); }, [publicData, refresh]);
+  useEffect(() => {
+    if (!partialData) return undefined;
+    // The visible page is complete. Load other articles after the first paint.
+    let nextFrame;
+    const frame = requestAnimationFrame(() => { nextFrame = requestAnimationFrame(() => void refresh()); });
+    return () => { cancelAnimationFrame(frame); if (nextFrame !== undefined) cancelAnimationFrame(nextFrame); };
+  }, [partialData, refresh]);
   useEffect(() => {
     const reconnect = () => { if (needsRetry.current) void refresh(); };
     window.addEventListener('online', reconnect);
@@ -213,8 +226,6 @@ export default function Portfolio() {
     return () => { window.clearTimeout(refreshRetry.current); window.removeEventListener('online', reconnect); window.removeEventListener('focus', reconnect); };
   }, [refresh]);
   useEffect(() => {
-    if (!window.EventSource) return undefined;
-    const events = new EventSource('/api/events');
     let refreshTimer;
     const onDataChanged = () => {
       clearTimeout(refreshTimer);
@@ -223,9 +234,8 @@ export default function Portfolio() {
         window.dispatchEvent(new Event('portfolio-data-changed'));
       }, 120);
     };
-    events.addEventListener('data-change', onDataChanged);
-    events.addEventListener('open', () => { if (needsRetry.current) void refresh(); });
-    return () => { clearTimeout(refreshTimer); events.close(); };
+    const unsubscribe = subscribeToSiteChanges(onDataChanged, () => { if (needsRetry.current) void refresh(); });
+    return () => { clearTimeout(refreshTimer); unsubscribe(); };
   }, [refresh]);
   useEffect(() => {
     if (!isAdmin) return undefined;
@@ -252,7 +262,11 @@ export default function Portfolio() {
   }, []);
   useEffect(() => { document.documentElement.lang = lang; document.documentElement.dir = lang === 'fa' ? 'rtl' : 'ltr'; writePreference('portfolio-language', lang); }, [lang]);
   useEffect(() => { document.documentElement.dataset.theme = theme; writePreference('portfolio-theme', theme); const themeMeta = document.querySelector('meta[name="theme-color"]'); if (themeMeta) themeMeta.content = theme === 'dark' ? '#151b18' : '#f7f8f6'; }, [theme]);
-  const currentPost = articleId ? data.posts.find((post) => encodeURIComponent(post.slug || post.id) === articleId || encodeURIComponent(post.id) === articleId) : null;
+  let postKey = articleId;
+  if (articleId) {
+    try { postKey = decodeURIComponent(articleId); } catch (_) { /* Invalid encoded URLs have no matching post. */ }
+  }
+  const currentPost = postKey ? data.posts.find((post) => post.slug === postKey || post.id === postKey) : null;
   useEffect(() => {
     const page = isBlog ? (lang === 'fa' ? 'وبلاگ' : 'Blog') : isProjects ? (lang === 'fa' ? 'پروژه‌ها' : 'Projects') : articleId ? localized(currentPost?.title, lang) : '';
     const title = page ? `${page} | Abbas Rohani Tabar` : (lang === 'fa' ? 'عباس روحانی‌تبار — توسعه‌دهنده فرانت‌اند' : 'Abbas Rohani Tabar — Frontend Developer');
@@ -327,7 +341,7 @@ export default function Portfolio() {
   // Header
   return <div className={`site-shell ${isAdmin ? 'admin-shell' : ''}`}>
     <header className={`topbar${headerHidden && !menuOpen ? ' is-hidden' : ''}${menuOpen ? ' menu-open' : ''}`}>
-      <a className="brand" href="/" aria-label="Abbas home"><img src={logo} alt="" /><span>AbbasRt<span className="brand-dot">.</span></span></a>
+      <a className="brand" href="/" aria-label="Abbas home"><img src={logo} fetchPriority="low" alt="" /><span>AbbasRt<span className="brand-dot">.</span></span></a>
       {!isAdmin && <><button className="nav-toggle" type="button" aria-label={lang === 'fa' ? 'باز و بسته کردن منو' : 'Toggle navigation'} aria-controls="primary-navigation" aria-expanded={menuOpen} onClick={() => { setMenuOpen((open) => !open); setHeaderHidden(false); }}>{menuOpen ? '×' : '☰'}</button><nav id="primary-navigation" className={`main-nav ${menuOpen ? 'is-open' : ''}`} aria-label={lang === 'fa' ? 'منوی اصلی' : 'Main navigation'}>{t.nav.map((label, i) => <Link key={label} to={['/', sectionPaths.about, sectionPaths.skills, '/projects', '/blog', sectionPaths.contact][i]} {...(i === 3 || i === 4 ? { target: '_blank', rel: 'noopener noreferrer' } : {})} onClick={() => setMenuOpen(false)}>{label}</Link>)}{data.resume && <a className="resume-nav-link" href={data.resume} download aria-label={lang === 'fa' ? '\u062F\u0627\u0646\u0644\u0648\u062F \u0631\u0632\u0648\u0645\u0647' : 'Download resume'} onClick={() => setMenuOpen(false)}><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m-5-5 5 5 5-5M4 19h16" /></svg><span>{lang === 'fa' ? '\u0631\u0632\u0648\u0645\u0647' : 'Resume'}</span></a>}</nav></>}
       <div className="top-actions">
         <PushToggle lang={lang} notify={setNotice} />
@@ -335,8 +349,8 @@ export default function Portfolio() {
         <button className="icon-button theme-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} aria-label={theme === 'light' ? t.themeDark : t.themeLight}>{theme === 'light' ? '☾' : '☀'}</button>
       </div>
     </header>
-    <RuntimeErrorBoundary lang={lang}><Suspense fallback={isAdmin ? <main className="admin-main"><div className="admin-card auth-card" role="status" aria-label={t.loading}><span className="skeleton-block skeleton-title" /><span className="skeleton-block skeleton-line" /></div></main> : <main className="section-wrap page-skeleton" aria-label={t.loading}><span className="skeleton-block skeleton-title" /><span className="skeleton-block skeleton-line" /></main>}>{isAdmin ? <AdminPage t={t} lang={lang} data={data} refresh={refresh} onCareerSaved={updateCareer} notify={setNotice} unresolvedNoticeCount={unresolvedNoticeCount} setUnresolvedNoticeCount={setUnresolvedNoticeCount} api={api} uploadImage={uploadImage} localized={localized} translatedError={translatedError} skillLogos={skillLogos} /> : initialLoading ? <main className="section-wrap page-skeleton" role="status" aria-label={t.loading}><span className="skeleton-block skeleton-title" /><span className="skeleton-block skeleton-line" /><div className="skeleton-cards"><span className="skeleton-block" /><span className="skeleton-block" /><span className="skeleton-block" /></div></main> : isBlog ? <BlogPage posts={data.posts} lang={lang} t={t} ads={data.ads} socials={data.socials} /> : isProjects ? <ProjectsPage projects={data.projects} lang={lang} t={t} ads={data.ads} socials={data.socials} /> : articleId ? <ArticlePage post={currentPost} posts={data.posts} lang={lang} t={t} notify={setNotice} refresh={refresh} ads={data.ads} socials={data.socials} /> : <main>
-      <Hero lang={lang} images={{ mobile: portraitMobile, desktop: portraitDesktop }} Link={Link} />
+    <RuntimeErrorBoundary lang={lang}><Suspense fallback={isAdmin ? <main className="admin-main"><div className="admin-card auth-card" role="status" aria-label={t.loading}><span className="skeleton-block skeleton-title" /><span className="skeleton-block skeleton-line" /></div></main> : <main className="section-wrap page-skeleton" aria-label={t.loading}><span className="skeleton-block skeleton-title" /><span className="skeleton-block skeleton-line" /></main>}>{isAdmin ? <AdminPage t={t} lang={lang} data={data} refresh={refresh} onCareerSaved={updateCareer} notify={setNotice} unresolvedNoticeCount={unresolvedNoticeCount} setUnresolvedNoticeCount={setUnresolvedNoticeCount} api={api} uploadImage={uploadImage} localized={localized} translatedError={translatedError} skillLogos={skillLogos} /> : initialLoading ? <main className="section-wrap page-skeleton" role="status" aria-label={t.loading}><span className="skeleton-block skeleton-title" /><span className="skeleton-block skeleton-line" /><div className="skeleton-cards"><span className="skeleton-block" /><span className="skeleton-block" /><span className="skeleton-block" /></div></main> : isBlog ? <BlogPage posts={data.posts} lang={lang} t={t} ads={data.ads} socials={data.socials} /> : isProjects ? <ProjectsPage projects={data.projects} lang={lang} t={t} ads={data.ads} socials={data.socials} hostname={hostname} protocol={protocol} /> : articleId ? <ArticlePage key={articleId} post={currentPost} posts={data.posts} lang={lang} t={t} notify={setNotice} onPostUpdated={updatePost} ads={data.ads} socials={data.socials} /> : <main>
+      <Hero lang={lang} images={{ mobile: portraitMobile, desktop: portraitDesktop }} Link={Link} priority={!sectionIdsByPath[pathname]} />
 
       <section className="intro-strip"><div className="section-wrap intro-inner"><span className="eyebrow">{t.about}</span><p>{t.fallbackAbout}</p></div></section>
       {!belowFoldReady && pathname === '/' && <div className="deferred-page-space" aria-hidden="true" />}
@@ -348,9 +362,9 @@ export default function Portfolio() {
 
       <section className="skills-section" id="skills"><div className="section-wrap content-section"><SectionHeading title={t.skills} subtitle={lang === 'fa' ? 'ابزارهایی که هر روز بهترشان می‌کنم' : 'Tools I keep getting better at'} /><div className="skill-grid">{data.skills.map((skill) => <article className="skill-card" key={skill.id || skill.name}><div className="skill-logo-wrap"><AdaptiveLogo className="skill-logo" src={skill.iconUrl || skillLogos[skill.name]} alt={skill.name} loading="lazy" /></div><h3>{skill.name}</h3></article>)}</div></div></section>
 
-      <section className="section-wrap content-section" id="projects"><SectionHeading title={t.projects} subtitle={lang === 'fa' ? 'چیزهایی که ساخته‌ام و در حال ساختشان هستم' : 'Things I have built and keep building'} /><div className="project-grid">{latestProjects.slice(0, 5).map((project, index) => <ProjectCard key={project.id} project={project} lang={lang} t={t} index={index} priority={pathname === '/featured-projects' && index === 0} />)}</div><div className="section-more"><Link to="/projects" target="_blank" rel="noopener noreferrer">{lang === 'fa' ? 'دیدن همه پروژه‌ها' : 'View all projects'}</Link></div></section>
+      <section className="section-wrap content-section" id="projects"><SectionHeading title={t.projects} subtitle={lang === 'fa' ? 'چیزهایی که ساخته‌ام و در حال ساختشان هستم' : 'Things I have built and keep building'} /><div className="project-grid">{latestProjects.map((project, index) => <ProjectCard key={project.id} project={project} lang={lang} t={t} index={index} hostname={hostname} protocol={protocol} priority={pathname === '/featured-projects' && index === 0} eager={pathname === '/featured-projects' && index === 1} />)}</div><div className="section-more"><Link to="/projects" target="_blank" rel="noopener noreferrer">{lang === 'fa' ? 'دیدن همه پروژه‌ها' : 'View all projects'}</Link></div></section>
 
-      <section className="blog-section" id="blog"><div className="section-wrap content-section"><SectionHeading title={t.blog} subtitle={lang === 'fa' ? 'یادداشت‌هایی از مسیر یادگیری و ساختن' : 'Notes from learning and building'} /><div className="blog-grid">{latestPosts.slice(0, 5).map((post) => <PostPreview key={post.id} post={post} lang={lang} />)}</div>{!latestPosts.length && <p className="empty-state">{t.emptyPosts}</p>}<div className="section-more"><Link to="/blog" target="_blank" rel="noopener noreferrer">{lang === 'fa' ? 'دیدن همه مطالب' : 'View all articles'}</Link></div></div></section>
+      <section className="blog-section" id="blog"><div className="section-wrap content-section"><SectionHeading title={t.blog} subtitle={lang === 'fa' ? 'یادداشت‌هایی از مسیر یادگیری و ساختن' : 'Notes from learning and building'} /><div className="blog-grid">{latestPosts.map((post, index) => <PostPreview key={post.id} post={post} lang={lang} priority={pathname === '/latest-posts' && index === 0} />)}</div>{!latestPosts.length && <p className="empty-state">{t.emptyPosts}</p>}<div className="section-more"><Link to="/blog" target="_blank" rel="noopener noreferrer">{lang === 'fa' ? 'دیدن همه مطالب' : 'View all articles'}</Link></div></div></section>
 
       <section className="contact-section" id="contact"><div className="section-wrap contact-inner"><span className="eyebrow">{t.contact}</span><h2>{lang === 'fa' ? <>یک ایده خوب<br /><span className="accent-text">از یک گفت‌وگو شروع می‌شود.</span></> : <>Good work starts<br /><span className="accent-text">with a conversation.</span></>}</h2><p>{t.contactText}</p><div className="contact-actions"><a className="button button-light" href="https://mail.google.com/mail/a.rohanitabar@gmail.com">{lang === 'fa' ? 'ایمیل به من' : 'Email me'}</a></div><ContactForm t={t} lang={lang} /></div></section></>}
     </main>}</Suspense></RuntimeErrorBoundary>
@@ -379,7 +393,7 @@ function ContactForm({ t, lang }) {
       setStatus(error.message === 'Enter an email address or phone number.' || error.message.includes('تلفن') ? error.message : t.messageFailed);
     } finally { setSending(false); }
   };
-  return <form ref={formRef} className="contact-form" onSubmit={submit}>
+  return <form ref={formRef} className="contact-form" method="post" onSubmit={submit}>
     <div className="form-columns"><label className="field-label">{t.name}<input name="name" required maxLength="80" autoComplete="name" /></label><label className="field-label">{t.email}<input type="email" name="email" maxLength="254" autoComplete="email" /></label><label className="field-label">{lang === 'fa' ? 'شماره تلفن' : 'Phone number'}<input type="tel" name="phone" maxLength="30" autoComplete="tel" /></label></div>
     <label className="field-label">{t.message}<textarea name="message" required minLength="4" maxLength="5000" rows="5" /></label><input className="contact-honeypot" type="text" name="website" tabIndex="-1" autoComplete="off" aria-hidden="true" />
     <button className="button button-light" disabled={sending}>{sending ? t.sending : t.sendMessage}</button>
